@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% from "components.html" import notice, statut_select, source_badge %}
+
+{% block page_title %}Prospects · COMPANIE FINDER{% endblock %}
+{% block eyebrow %}Tableau de bord{% endblock %}
+{% block heading %}Prospects{% endblock %}
+{% block actions %}
+<a href="/prospects/nouveau" class="inline-flex items-center rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-semibold text-ink-900 shadow-sm hover:bg-paper">Ajouter</a>
+<a href="{{ export_href }}" data-export class="inline-flex items-center rounded-xl bg-pine-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-pine-800">Exporter le CSV</a>
+{% endblock %}
+
+{% block content %}
+<div x-data="prospectTable()">
+  {{ notice(banner_kind, banner) }}
+
+  <div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+    {% for key, label in STATUTS %}
+    <a href="{{ page_href(filters, statut=key if filters.statut != key else '') }}" class="rounded-2xl border bg-card px-4 py-3 shadow-card transition hover:border-pine-600/40 {% if filters.statut == key %}border-pine-600 ring-2 ring-pine-600/15{% else %}border-line{% endif %}">
+      <span class="block text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-500">{{ label }}</span>
+      <span class="mt-1 block font-display text-3xl leading-none text-ink-950">{{ counts[key] }}</span>
+    </a>
+    {% endfor %}
+  </div>
+
+  <form method="get" action="/" class="no-print mb-4 flex flex-col gap-3 rounded-2xl border border-line bg-card p-3 shadow-card lg:flex-row lg:items-center">
+    <label class="min-w-0 flex-1">
+      <span class="sr-only">Recherche</span>
+      <input name="q" data-live-q value="{{ filters.q }}" x-model="q" autocomplete="off" placeholder="Nom, rue, SIRET, ville…" class="w-full rounded-xl border border-transparent bg-paper px-3.5 py-2.5 text-sm outline-none focus:border-pine-600 focus:bg-white focus:ring-4 focus:ring-pine-600/10">
+    </label>
+    <select name="secteur" onchange="this.form.requestSubmit()" class="rounded-xl border border-line bg-white px-3 py-2.5 text-sm">
+      <option value="">Tous les secteurs</option>
+      {% for sector in SECTEURS %}
+      <option value="{{ sector.id }}" {% if filters.secteur == sector.id %}selected{% endif %}>{{ sector.label }}</option>
+      {% endfor %}
+    </select>
+    <select name="source" onchange="this.form.requestSubmit()" class="rounded-xl border border-line bg-white px-3 py-2.5 text-sm">
+      <option value="">Toutes les sources</option>
+      {% for value, label in SOURCES %}
+      <option value="{{ value }}" {% if filters.source == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <input name="cp" value="{{ filters.cp }}" inputmode="numeric" placeholder="Code postal" class="w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm lg:w-32">
+    <input name="ville" value="{{ filters.ville }}" placeholder="Ville" class="w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm lg:w-40">
+    {% if filters.statut %}<input type="hidden" name="statut" value="{{ filters.statut }}">{% endif %}
+    <button class="rounded-xl bg-ink-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-ink-900">Filtrer</button>
+    {% if has_filters %}<a href="/" class="px-2 text-sm font-semibold text-ink-500 hover:text-ink-900">Réinitialiser</a>{% endif %}
+  </form>
+
+  <p class="mb-3 text-sm text-ink-500">
+    <span x-text="shown">{{ rows|length }}</span><span class="text-ink-400"> / <span x-text="total">{{ rows|length }}</span></span>
+    dans cette sélection
+  </p>
+
+  {% if rows %}
+  <div class="overflow-hidden rounded-2xl border border-line bg-card shadow-card">
+    <div class="overflow-x-auto">
+      <table class="w-full min-w-[920px] border-collapse text-left text-sm">
+        <thead class="bg-[#f7f3ec] text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-500">
+          <tr>
+            <th class="px-4 py-3 font-semibold">Nom / enseigne</th>
+            <th class="px-4 py-3 font-semibold">Secteur</th>
+            <th class="px-4 py-3 font-semibold">Adresse</th>
+            <th class="px-4 py-3 font-semibold">SIRET</th>
+            <th class="px-4 py-3 font-semibold">Source</th>
+            <th class="px-4 py-3 font-semibold">Statut</th>
+          </tr>
+        </thead>
+        <tbody x-ref="rows">
+          {% for prospect in rows %}
+          <tr class="border-t border-line/80 hover:bg-pine-50/70" x-show="match($el.dataset.blob)" data-blob="{{ prospect.blob }}">
+            <td class="px-4 py-3 align-middle">
+              <a href="/prospects/{{ prospect.id }}" class="font-semibold text-ink-950 hover:text-pine-700">{{ prospect.nom_affiche }}</a>
+              {% if prospect.enseigne and prospect.enseigne != prospect.nom %}
+              <p class="mt-0.5 text-xs text-ink-500">{{ prospect.nom }}</p>
+              {% endif %}
+            </td>
+            <td class="px-4 py-3 align-middle">
+              <p>{{ prospect.secteur or "-" }}</p>
+              <p class="mt-1 flex flex-wrap gap-1">
+                {% if prospect.code_naf %}<span class="font-mono text-[11px] text-ink-400">{{ prospect.code_naf }}</span>{% endif %}
+                {% if prospect.independant %}<span class="rounded-full bg-ink-950/5 px-1.5 py-0.5 text-[11px] font-medium text-ink-700">Indépendant</span>{% endif %}
+                {% if prospect.coworking %}<span class="rounded-full bg-ink-950/5 px-1.5 py-0.5 text-[11px] font-medium text-ink-700">Coworking</span>{% endif %}
+                {% if not prospect.actif %}<span class="rounded-full bg-red-50 px-1.5 py-0.5 text-[11px] font-medium text-red-800">Fermé</span>{% endif %}
+              </p>
+            </td>
+            <td class="max-w-xs px-4 py-3 align-middle">
+              <p class="line-clamp-2 text-ink-800">{{ prospect.adresse or "-" }}</p>
+            </td>
+            <td class="px-4 py-3 align-middle font-mono text-[13px] text-ink-700">{{ prospect.siret or "-" }}</td>
+            <td class="px-4 py-3 align-middle">{{ source_badge(prospect.source) }}</td>
+            <td class="px-4 py-3 align-middle" data-stop onclick="event.stopPropagation()">{{ statut_select(prospect.id, prospect.statut) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <p x-cloak x-show="total > 0 && shown === 0" class="mt-4 rounded-2xl border border-dashed border-line bg-card px-4 py-6 text-sm text-ink-500">
+    Aucun prospect ne contient cette recherche.
+  </p>
+  {% elif has_filters %}
+  <div class="rounded-3xl border border-dashed border-line bg-card px-6 py-16 text-center">
+    <p class="font-display text-2xl text-ink-950">Aucun prospect dans ces filtres</p>
+    <p class="mx-auto mt-2 max-w-md text-sm text-ink-500">Élargissez le secteur, la ville ou le statut, ou importez une nouvelle liste SIRENE.</p>
+    <a href="/" class="mt-6 inline-flex rounded-xl bg-ink-950 px-4 py-2.5 text-sm font-semibold text-white">Voir tout le pipeline</a>
+  </div>
+  {% else %}
+  <div class="rounded-3xl border border-dashed border-line bg-card px-6 py-16 text-center">
+    <p class="font-display text-3xl text-ink-950">Le tableau est vide</p>
+    <p class="mx-auto mt-3 max-w-lg text-sm leading-6 text-ink-500">Lancez une recherche SIRENE sur un code postal, ou ajoutez un salon repéré sur Google Maps ou Instagram.</p>
+    <div class="mt-6 flex flex-wrap justify-center gap-2">
+      <a href="/recherche" class="inline-flex rounded-xl bg-pine-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-pine-800">Rechercher</a>
+      <a href="/prospects/nouveau" class="inline-flex rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-semibold text-ink-900">Ajout manuel</a>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

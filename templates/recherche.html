@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% from "components.html" import notice %}
+
+{% block page_title %}Recherche · COMPANIE FINDER{% endblock %}
+{% block eyebrow %}SIRENE{% endblock %}
+{% block heading %}Recherche{% endblock %}
+
+{% block content %}
+{% if error %}{{ notice('error', error) }}{% endif %}
+<div class="grid items-start gap-8 xl:grid-cols-[minmax(0,42rem)_20rem]">
+  <form method="post" action="/recherche" class="rounded-3xl border border-line bg-card p-5 shadow-card sm:p-7" x-data="{ loading: false }" @submit="loading = true">
+    <div class="grid gap-4 sm:grid-cols-3">
+      <label class="block">
+        <span class="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-500">Code postal</span>
+        <input name="code_postal" value="{{ form.code_postal }}" inputmode="numeric" autocomplete="postal-code" placeholder="59100" class="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-pine-600 focus:ring-4 focus:ring-pine-600/10">
+      </label>
+      <label class="block sm:col-span-2">
+        <span class="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-500">Ville</span>
+        <input name="ville" value="{{ form.ville }}" autocomplete="address-level2" placeholder="Roubaix" class="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-pine-600 focus:ring-4 focus:ring-pine-600/10">
+      </label>
+    </div>
+    <label class="mt-4 block">
+      <span class="mb-1.5 flex items-baseline justify-between gap-3">
+        <span class="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-500">Quartier ou rue</span>
+        <button type="button" class="text-[11px] font-semibold normal-case tracking-normal text-pine-700" onclick="document.querySelector('[name=code_postal]').value='59100'">Exemple : 59100</button>
+      </span>
+      <input name="quartier" value="{{ form.quartier }}" placeholder="Wazemmes, rue de la Paix…" class="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-pine-600 focus:ring-4 focus:ring-pine-600/10">
+    </label>
+    <label class="mt-3 flex items-start gap-3 text-sm text-ink-700">
+      <input type="checkbox" name="filtre_rue" value="1" class="mt-1" {% if form.filtre_rue %}checked{% endif %}>
+      <span>Ne garder que les adresses qui contiennent ce mot. Les quartiers sont rarement écrits dans SIRENE : décochez pour prendre tout le code postal.</span>
+    </label>
+
+    <fieldset class="mt-8">
+      <legend class="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-500">Secteurs</legend>
+      <div class="mt-3 grid gap-2 sm:grid-cols-2">
+        {% for sector in SECTEURS %}
+        <label class="cursor-pointer">
+          <input type="checkbox" name="secteur" value="{{ sector.id }}" class="peer sr-only" {% if sector.id in form.secteurs %}checked{% endif %}>
+          <span class="flex h-full flex-col rounded-2xl border border-line bg-white px-4 py-3 transition peer-checked:border-pine-600 peer-checked:bg-pine-50 peer-focus-visible:ring-4 peer-focus-visible:ring-pine-600/15">
+            <span class="flex items-center justify-between gap-3">
+              <span class="text-sm font-semibold text-ink-950">{{ sector.label }}</span>
+              <span class="font-mono text-[11px] text-ink-400">{{ sector.code }}</span>
+            </span>
+            <span class="mt-1 text-xs leading-5 text-ink-500">{{ sector.hint }}</span>
+          </span>
+        </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    <label class="mt-4 flex items-center justify-between gap-4 rounded-2xl border border-line bg-white px-4 py-3">
+      <span>
+        <span class="block text-sm font-semibold">Établissements actifs seulement</span>
+        <span class="block text-xs text-ink-500">Masque les SIRET fermés</span>
+      </span>
+      <input type="checkbox" name="actifs" value="1" {% if form.actifs %}checked{% endif %}>
+    </label>
+
+    <button type="submit" class="mt-6 inline-flex w-full items-center justify-center rounded-xl bg-pine-700 px-4 py-3 text-sm font-semibold text-white hover:bg-pine-800 disabled:cursor-wait disabled:opacity-70" :disabled="loading">
+      <span x-show="!loading">Interroger SIRENE</span>
+      <span x-cloak x-show="loading">Lecture du fichier officiel…</span>
+    </button>
+    <p class="mt-3 text-center text-xs leading-5 text-ink-500">L'API répond par pages de 25. Une grande ville peut prendre quelques secondes. L'adresse retenue est celle de l'établissement local, pas du siège.</p>
+  </form>
+
+  <aside class="space-y-4">
+    <section class="rounded-3xl border border-line bg-card p-5 shadow-card">
+      <h2 class="font-display text-xl text-ink-950">Ce que SIRENE fournit</h2>
+      <ul class="mt-3 space-y-2 text-sm leading-6 text-ink-700">
+        <li>Nom, enseigne et SIRET de l'établissement</li>
+        <li>Adresse, code postal, ville</li>
+        <li>Date de création et état actif</li>
+        <li>Code NAF du métier</li>
+      </ul>
+    </section>
+    <section class="rounded-3xl border border-line bg-card p-5 shadow-card">
+      <h2 class="font-display text-xl text-ink-950">À qualifier ensuite</h2>
+      <ul class="mt-3 space-y-2 text-sm leading-6 text-ink-700">
+        <li>Site web et outil de réservation</li>
+        <li>Notes Google Maps et Instagram</li>
+        <li>Salons absents du fichier, ajoutés à la main</li>
+      </ul>
+      <a href="/prospects/nouveau" class="mt-4 inline-flex text-sm font-semibold text-pine-700 hover:text-pine-800">Ajouter un prospect manuel</a>
+    </section>
+  </aside>
+</div>
+{% endblock %}

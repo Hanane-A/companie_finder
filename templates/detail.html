@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% from "components.html" import notice, text_field, area_field, select_field, source_badge %}
+
+{% block page_title %}{{ prospect.nom_affiche }} · COMPANIE FINDER{% endblock %}
+{% block eyebrow %}Fiche prospect{% endblock %}
+{% block heading %}{{ prospect.nom_affiche }}{% endblock %}
+{% block actions %}
+<a href="/" class="inline-flex items-center rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-semibold shadow-sm hover:bg-paper">Retour</a>
+{% if maps %}
+<a href="{{ maps }}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center rounded-xl bg-pine-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-pine-800">Google Maps</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+{{ notice('ok', banner) }}
+{% if error %}{{ notice('error', error) }}{% endif %}
+
+<div class="grid items-start gap-6 xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
+  <section class="rounded-3xl border border-line bg-card p-5 shadow-card xl:sticky xl:top-28">
+    <div class="flex flex-wrap items-center gap-2">
+      {{ source_badge(prospect.source) }}
+      {% if prospect.actif %}<span class="rounded-full bg-pine-50 px-2 py-0.5 text-[11px] font-semibold text-pine-800">Actif</span>{% else %}<span class="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-800">Fermé</span>{% endif %}
+      {% if prospect.independant %}<span class="rounded-full bg-ink-950/5 px-2 py-0.5 text-[11px] font-semibold">Indépendant</span>{% endif %}
+      {% if prospect.coworking %}<span class="rounded-full bg-ink-950/5 px-2 py-0.5 text-[11px] font-semibold">Coworking</span>{% endif %}
+    </div>
+    {% if prospect.enseigne and prospect.enseigne != prospect.nom %}
+    <p class="mt-4 text-sm text-ink-500">{{ prospect.nom }}</p>
+    {% endif %}
+    <p class="mt-1 text-sm font-medium text-ink-800">{{ prospect.secteur or "Secteur non précisé" }}{% if prospect.code_naf %} · <span class="font-mono text-xs">{{ prospect.code_naf }}</span>{% endif %}</p>
+
+    <dl class="mt-6 space-y-3 text-sm">
+      <div class="flex items-start justify-between gap-3">
+        <dt class="text-ink-500">SIRET</dt>
+        <dd class="text-right font-mono text-[13px]">
+          {{ prospect.siret or "-" }}
+          {% if prospect.siret %}<button type="button" class="ml-2 font-sans text-xs font-semibold text-pine-700" data-copy="{{ prospect.siret }}">Copier</button>{% endif %}
+        </dd>
+      </div>
+      <div class="flex justify-between gap-3"><dt class="text-ink-500">SIREN</dt><dd class="font-mono text-[13px]">{{ prospect.siren or "-" }}</dd></div>
+      <div>
+        <dt class="text-ink-500">Adresse</dt>
+        <dd class="mt-1 leading-6">{{ prospect.adresse or "-" }}
+          {% if prospect.adresse %}<button type="button" class="mt-1 block text-xs font-semibold text-pine-700" data-copy="{{ prospect.adresse }}">Copier l'adresse</button>{% endif %}
+        </dd>
+      </div>
+      <div class="flex justify-between gap-3"><dt class="text-ink-500">Ouverture</dt><dd>{{ prospect.date_creation | fr_date or "-" }}</dd></div>
+      {% if prospect.date_creation_unite and prospect.date_creation_unite != prospect.date_creation %}
+      <div class="flex justify-between gap-3"><dt class="text-ink-500">Entreprise</dt><dd>{{ prospect.date_creation_unite | fr_date }}</dd></div>
+      {% endif %}
+      {% if prospect.effectif %}
+      <div class="flex justify-between gap-3"><dt class="text-ink-500">Effectif</dt><dd class="text-right">{{ prospect.effectif }}</dd></div>
+      {% endif %}
+      {% if prospect.dirigeant and prospect.officiel %}
+      <div>
+        <dt class="text-ink-500">Dirigeant</dt>
+        <dd class="mt-1">{{ prospect.dirigeant }}</dd>
+      </div>
+      {% endif %}
+    </dl>
+
+    <div class="mt-6 flex flex-col gap-2 border-t border-line pt-4 text-sm font-semibold">
+      {% if annuaire %}<a class="text-pine-700 hover:text-pine-800" href="{{ annuaire }}" target="_blank" rel="noopener noreferrer">Fiche annuaire entreprises</a>{% endif %}
+      <a class="text-pine-700 hover:text-pine-800" href="{{ instagram }}" target="_blank" rel="noopener noreferrer">Chercher l'Instagram</a>
+      {% if prospect.site_web | external_url %}<a class="truncate text-pine-700 hover:text-pine-800" href="{{ prospect.site_web | external_url }}" target="_blank" rel="noopener noreferrer">{{ prospect.site_web }}</a>{% endif %}
+    </div>
+  </section>
+
+  <form method="post" action="/prospects/{{ prospect.id }}" class="rounded-3xl border border-line bg-card p-5 shadow-card sm:p-7">
+    <h2 class="font-display text-2xl text-ink-950">Qualification</h2>
+    <p class="mt-1 text-sm text-ink-500">Notes de terrain, présence en ligne, outil déjà en place.</p>
+
+    <div class="mt-6 grid gap-4 sm:grid-cols-2">
+      {{ text_field('marque', 'Enseigne sur place', values.marque, 'Nom lu sur la vitrine') }}
+      {{ text_field('quartier', 'Quartier', values.quartier, 'Pour regrouper la tournée') }}
+      {{ select_field('statut', 'Statut', STATUTS, values.statut) }}
+      {{ select_field('site_presence', 'Site web', SITE_PRESENCE, values.site_presence) }}
+      {{ text_field('site_web', 'URL du site', values.site_web, 'https://…', 'text') }}
+      {{ select_field('outil_reservation', 'Réservation en ligne', OUTILS, values.outil_reservation) }}
+    </div>
+
+    {% if not prospect.officiel %}
+    <div class="mt-8 border-t border-line pt-6">
+      <h3 class="text-sm font-semibold">Identité saisie à la main</h3>
+      <div class="mt-4 grid gap-4 sm:grid-cols-2">
+        {{ text_field('nom', 'Raison sociale', values.nom, 'Si elle diffère de l’enseigne') }}
+        {{ text_field('siret', 'SIRET', values.siret, '14 chiffres, facultatif') }}
+        {{ text_field('adresse', 'Adresse', values.adresse, '12 rue de la Paix') }}
+        {{ text_field('numero_voie', 'Numéro', values.numero_voie, '12') }}
+        {{ text_field('libelle_voie', 'Rue', values.libelle_voie, 'Rue de la Paix', 'text', 'Sert à trier la tournée') }}
+        {{ text_field('code_postal', 'Code postal', values.code_postal, '59100') }}
+        {{ text_field('ville', 'Ville', values.ville, 'Roubaix') }}
+        {{ text_field('dirigeant', 'Contact', values.dirigeant, 'Prénom Nom') }}
+        {{ text_field('date_creation', 'Date d’ouverture', values.date_creation, '', 'date') }}
+        {{ select_field('source', 'Source', SOURCES, values.source) }}
+        {{ select_field('metier', 'Métier', METIERS, values.metier) }}
+      </div>
+      <div class="mt-4 flex flex-wrap gap-4 text-sm">
+        <label class="inline-flex items-center gap-2"><input type="checkbox" name="independant" value="1" {% if values.independant %}checked{% endif %}> Indépendant / freelance</label>
+        <label class="inline-flex items-center gap-2"><input type="checkbox" name="coworking" value="1" {% if values.coworking %}checked{% endif %}> Coworking ou salon partagé</label>
+        <label class="inline-flex items-center gap-2"><input type="checkbox" name="actif" value="1" {% if values.actif %}checked{% endif %}> En activité</label>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="mt-6 grid gap-4">
+      {{ area_field('notes_terrain', 'Notes de terrain', values.notes_terrain, 'Sonnette au fond de la cour, 4 postes, gérant présent le mardi matin…') }}
+      {{ area_field('notes_maps', 'Notes Google Maps', values.notes_maps, '4,6/5 · 128 avis · fermé le lundi · vitrine récente') }}
+      {{ area_field('notes_reseaux', 'Notes Instagram', values.notes_reseaux, '@atelier.nord · lien de réservation en bio · story il y a 2 jours') }}
+    </div>
+
+    <div class="mt-6 flex flex-wrap items-center justify-between gap-3">
+      <button class="rounded-xl bg-pine-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-pine-800">Enregistrer la fiche</button>
+      {% if not prospect.officiel %}
+      <span class="text-xs text-ink-400">Les fiches SIRENE gardent l'adresse officielle. Celle-ci reste éditable.</span>
+      {% else %}
+      <span class="text-xs text-ink-400">L'adresse officielle est conservée. Une réimportation ne remplace pas ces notes.</span>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+<form method="post" action="/prospects/{{ prospect.id }}/supprimer" class="no-print mt-4" onsubmit="return confirm('Retirer ce prospect du tableau ?')">
+  <button class="text-sm font-semibold text-red-800/80 hover:text-red-800">Retirer du tableau</button>
+</form>
+<script>
+  document.querySelector('[name=site_web]')?.addEventListener('input', (event) => {
+    if (event.target.value.trim()) {
+      const presence = document.querySelector('[name=site_presence]');
+      if (presence && presence.value === 'inconnu') presence.value = 'oui';
+    }
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% from "components.html" import notice, source_badge %}
+
+{% block page_title %}Résultats · COMPANIE FINDER{% endblock %}
+{% block eyebrow %}{{ summary }}{% endblock %}
+{% block heading %}{{ items|length }} établissement{% if items|length != 1 %}s{% endif %}{% endblock %}
+{% block actions %}
+<a href="/recherche" class="inline-flex items-center rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-semibold text-ink-900 shadow-sm hover:bg-paper">Modifier</a>
+{% endblock %}
+
+{% block content %}
+{{ notice(banner_kind, banner) }}
+{% if truncated %}
+<div class="mb-4 rounded-2xl border border-clay-700/20 bg-clay-50 px-4 py-3 text-sm text-clay-700">Liste plafonnée à 200 entreprises par métier. Ajoutez un code postal ou une rue pour la compléter.</div>
+{% endif %}
+{% if wide %}
+<div class="mb-4 rounded-2xl border border-clay-700/20 bg-clay-50 px-4 py-3 text-sm text-clay-700">Grande commune : précisez un code postal pour une tournée exploitable.</div>
+{% endif %}
+
+<p class="mb-3 max-w-3xl text-sm text-ink-500">Le chiffre SIRENE compte les entreprises. Le tableau ne garde que les établissements ouverts à l'adresse demandée.</p>
+<ul class="mb-6 flex flex-wrap gap-2 text-xs text-ink-500">
+  {% for report in reports %}
+  <li class="rounded-full bg-white px-3 py-1.5 ring-1 ring-line">
+    {{ report.label }}
+    {% if report.queries == 1 %} · {{ report.reported }} dans SIRENE{% else %} · mots-clés{% endif %}
+    {% if report.truncated %} · plafonné{% endif %}
+  </li>
+  {% endfor %}
+  <li class="rounded-full bg-pine-50 px-3 py-1.5 font-semibold text-pine-800">{{ fresh_count }} nouveau{{ 'x' if fresh_count != 1 else '' }}</li>
+</ul>
+
+{% if items %}
+<form method="post" action="/recherche/{{ token }}/importer">
+  <div class="no-print mb-3 flex flex-wrap items-center gap-2">
+    <button type="button" class="rounded-xl border border-line bg-white px-3 py-2 text-sm font-semibold" onclick="pickProspects('new')">Nouveaux seulement</button>
+    <button type="button" class="rounded-xl border border-line bg-white px-3 py-2 text-sm font-semibold" onclick="pickProspects('all')">Tout cocher</button>
+    <button type="button" class="rounded-xl border border-line bg-white px-3 py-2 text-sm font-semibold" onclick="pickProspects('none')">Tout décocher</button>
+  </div>
+  <div class="overflow-hidden rounded-2xl border border-line bg-card shadow-card">
+    <div class="overflow-x-auto">
+      <table class="w-full min-w-[980px] text-left text-sm">
+        <thead class="bg-[#f7f3ec] text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-500">
+          <tr>
+            <th class="px-4 py-3">
+              <input type="checkbox" aria-label="Tout cocher" onclick="document.querySelectorAll('[data-pick]').forEach((el) => el.checked = this.checked)">
+            </th>
+            <th class="px-4 py-3 font-semibold">Nom / enseigne</th>
+            <th class="px-4 py-3 font-semibold">Secteur</th>
+            <th class="px-4 py-3 font-semibold">Adresse</th>
+            <th class="px-4 py-3 font-semibold">SIRET</th>
+            <th class="px-4 py-3 font-semibold">Création</th>
+            <th class="px-4 py-3 font-semibold">Suivi</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in items %}
+          <tr class="border-t border-line/80 hover:bg-pine-50/60">
+            <td class="px-4 py-3 align-middle">
+              <input type="checkbox" name="siret" value="{{ item.siret }}" data-pick data-known="{{ 1 if item.prospect_id else 0 }}" {% if not item.prospect_id %}checked{% endif %} aria-label="Sélectionner {{ item.enseigne or item.nom }}">
+            </td>
+            <td class="px-4 py-3 align-middle">
+              <p class="font-semibold">{{ item.enseigne or item.nom }}</p>
+              {% if item.enseigne and item.enseigne != item.nom %}<p class="text-xs text-ink-500">{{ item.nom }}</p>{% endif %}
+            </td>
+            <td class="px-4 py-3 align-middle">
+              <p>{{ item.secteur }}</p>
+              <p class="mt-1 flex flex-wrap gap-1">
+                {% if item.code_naf %}<span class="font-mono text-[11px] text-ink-400">{{ item.code_naf }}</span>{% endif %}
+                {% if item.independant %}<span class="rounded-full bg-ink-950/5 px-1.5 py-0.5 text-[11px]">Indépendant</span>{% endif %}
+                {% if item.coworking %}<span class="rounded-full bg-ink-950/5 px-1.5 py-0.5 text-[11px]">Coworking</span>{% endif %}
+              </p>
+            </td>
+            <td class="max-w-sm px-4 py-3 align-middle"><p class="line-clamp-2">{{ item.adresse }}</p></td>
+            <td class="px-4 py-3 align-middle font-mono text-[13px]">{{ item.siret }}</td>
+            <td class="px-4 py-3 align-middle text-ink-700">{{ item.date_creation | fr_date or "-" }}</td>
+            <td class="px-4 py-3 align-middle">
+              {% if item.prospect_id %}
+              <a href="/prospects/{{ item.prospect_id }}" class="text-sm font-semibold text-pine-700">Déjà suivi</a>
+              {% else %}
+              <span class="text-xs text-ink-400">Nouveau</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="no-print sticky bottom-4 mt-4 flex justify-end">
+    <button class="rounded-xl bg-pine-700 px-5 py-3 text-sm font-semibold text-white shadow-card hover:bg-pine-800">Ajouter la sélection au tableau</button>
+  </div>
+</form>
+{% else %}
+<div class="rounded-3xl border border-dashed border-line bg-card px-6 py-16 text-center">
+  <p class="font-display text-2xl text-ink-950">Aucun établissement</p>
+  <p class="mx-auto mt-2 max-w-lg text-sm leading-6 text-ink-500">Élargissez le territoire, décochez le filtre de rue, ou ajoutez à la main les salons trouvés uniquement sur Maps ou Instagram.</p>
+  <div class="mt-6 flex flex-wrap justify-center gap-2">
+    <a href="/recherche" class="inline-flex rounded-xl bg-ink-950 px-4 py-2.5 text-sm font-semibold text-white">Nouvelle recherche</a>
+    <a href="/prospects/nouveau" class="inline-flex rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-semibold">Ajout manuel</a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

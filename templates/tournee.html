@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% from "components.html" import source_badge %}
+
+{% block page_title %}Tournée · COMPANIE FINDER{% endblock %}
+{% block eyebrow %}{{ zone or "Toutes les fiches" }}{% endblock %}
+{% block heading %}{% if stops %}{{ stops|length }} arrêt{% if stops|length != 1 %}s{% endif %}{% else %}Tournée{% endif %}{% endblock %}
+{% block actions %}
+<a href="{{ export_href }}" class="no-print inline-flex items-center rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-semibold shadow-sm hover:bg-paper">Exporter</a>
+<button type="button" class="no-print inline-flex items-center rounded-xl bg-pine-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-pine-800" onclick="window.print()">Imprimer</button>
+{% endblock %}
+
+{% block content %}
+<p class="mb-5 hidden text-sm print:block">COMPANIE FINDER - tournée{% if zone %} · {{ zone }}{% endif %}</p>
+<form method="get" action="/tournee" class="no-print mb-6 grid gap-3 rounded-2xl border border-line bg-card p-3 shadow-card md:grid-cols-4">
+  <input type="hidden" name="filtre" value="1">
+  <input name="cp" value="{{ filters.cp }}" placeholder="Code postal" class="rounded-xl border border-line bg-white px-3 py-2.5 text-sm">
+  <input name="ville" value="{{ filters.ville }}" placeholder="Ville" class="rounded-xl border border-line bg-white px-3 py-2.5 text-sm">
+  <input name="q" value="{{ filters.q }}" placeholder="Rue, nom, quartier" class="rounded-xl border border-line bg-white px-3 py-2.5 text-sm md:col-span-2">
+  <select name="secteur" class="rounded-xl border border-line bg-white px-3 py-2.5 text-sm md:col-span-2">
+    <option value="">Tous les secteurs</option>
+    {% for sector in SECTEURS %}
+    <option value="{{ sector.id }}" {% if filters.secteur == sector.id %}selected{% endif %}>{{ sector.label }}</option>
+    {% endfor %}
+  </select>
+  <label class="flex items-center gap-2 text-sm md:col-span-1"><input type="checkbox" name="masquer_refuses" value="1" {% if masquer_refuses %}checked{% endif %}> Masquer les refus</label>
+  <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="masquer_clients" value="1" {% if masquer_clients %}checked{% endif %}> Masquer les clients</label>
+  <button class="rounded-xl bg-ink-950 px-4 py-2.5 text-sm font-semibold text-white md:col-span-4">Préparer la tournée</button>
+</form>
+
+{% if groups %}
+<div class="mx-auto flex max-w-3xl flex-col gap-4">
+  {% for group in groups %}
+  <section class="street-card rounded-2xl border border-line bg-card shadow-card">
+    <header class="flex items-center justify-between gap-3 border-b border-line px-5 py-3">
+      <h2 class="font-semibold text-ink-950">{{ group.rue }}</h2>
+      <span class="text-xs font-medium text-ink-500">{{ group.stops|length }} arrêt{% if group.stops|length != 1 %}s{% endif %}</span>
+    </header>
+    <ol>
+      {% for stop in group.stops %}
+      <li class="flex items-start justify-between gap-4 border-t border-line/70 px-5 py-3 first:border-t-0">
+        <div class="flex min-w-0 gap-3">
+          <span class="w-12 shrink-0 pt-0.5 font-mono text-sm text-ink-400">{{ stop.numero_voie or "–" }}</span>
+          <div class="min-w-0">
+            <a href="/prospects/{{ stop.id }}" class="font-semibold text-ink-950 hover:text-pine-700">{{ stop.nom_affiche }}</a>
+            <p class="text-xs text-ink-500">{{ stop.secteur or "Secteur non précisé" }}{% if stop.adresse %} · {{ stop.adresse }}{% endif %}</p>
+          </div>
+        </div>
+        <span class="status-pill shrink-0" data-status="{{ stop.statut }}">{{ STATUT_LABELS.get(stop.statut, stop.statut) }}</span>
+      </li>
+      {% endfor %}
+    </ol>
+  </section>
+  {% endfor %}
+</div>
+{% else %}
+<div class="rounded-3xl border border-dashed border-line bg-card px-6 py-16 text-center">
+  <p class="font-display text-2xl text-ink-950">Aucun arrêt</p>
+  <p class="mx-auto mt-2 max-w-md text-sm text-ink-500">Importez des prospects, ou élargissez le code postal. Les refus sont masqués par défaut.</p>
+  <a href="/recherche" class="mt-6 inline-flex rounded-xl bg-pine-700 px-4 py-2.5 text-sm font-semibold text-white">Lancer une recherche</a>
+</div>
+{% endif %}
+{% endblock %}

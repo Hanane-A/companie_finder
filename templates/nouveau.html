@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% from "components.html" import notice, text_field, area_field, select_field %}
+
+{% block page_title %}Nouveau prospect · COMPANIE FINDER{% endblock %}
+{% block eyebrow %}Ajout manuel{% endblock %}
+{% block heading %}Nouveau prospect{% endblock %}
+
+{% block content %}
+{% if error %}{{ notice('error', error) }}{% endif %}
+<form method="post" action="/prospects" class="mx-auto max-w-4xl rounded-3xl border border-line bg-card p-5 shadow-card sm:p-7">
+  <p class="max-w-2xl text-sm leading-6 text-ink-500">Pour un salon trouvé sur Google Maps ou Instagram, absent de SIRENE, ou dont vous voulez garder le nom commercial avant même d'avoir le SIRET.</p>
+  <div class="mt-6 grid gap-4 sm:grid-cols-2">
+    {{ text_field('marque', 'Nom / enseigne', values.marque, 'Atelier Nord') }}
+    {{ text_field('nom', 'Raison sociale', values.nom, 'Si elle diffère de l’enseigne') }}
+    {{ select_field('metier', 'Métier', METIERS, values.metier) }}
+    {{ select_field('source', 'Source', SOURCES, values.source) }}
+    {{ text_field('siret', 'SIRET', values.siret, 'Facultatif') }}
+    {{ text_field('adresse', 'Adresse', values.adresse, '12 rue de la Paix, 59100 Roubaix') }}
+    {{ text_field('numero_voie', 'Numéro', values.numero_voie, '12') }}
+    {{ text_field('libelle_voie', 'Rue', values.libelle_voie, 'Rue de la Paix', 'text', 'Pour la tournée') }}
+    {{ text_field('code_postal', 'Code postal', values.code_postal, '59100') }}
+    {{ text_field('ville', 'Ville', values.ville, 'Roubaix') }}
+    {{ text_field('quartier', 'Quartier', values.quartier, 'Centre') }}
+    {{ select_field('statut', 'Statut', STATUTS, values.statut) }}
+    {{ select_field('site_presence', 'Site web', SITE_PRESENCE, values.site_presence) }}
+    {{ text_field('site_web', 'URL', values.site_web, 'https://') }}
+    <div class="sm:col-span-2">{{ select_field('outil_reservation', 'Réservation en ligne', OUTILS, values.outil_reservation) }}</div>
+  </div>
+  <div class="mt-4 flex flex-wrap gap-4 text-sm">
+    <label class="inline-flex items-center gap-2"><input type="checkbox" name="independant" value="1" {% if values.independant %}checked{% endif %}> Indépendant / freelance</label>
+    <label class="inline-flex items-center gap-2"><input type="checkbox" name="coworking" value="1" {% if values.coworking %}checked{% endif %}> Coworking beauté</label>
+    <label class="inline-flex items-center gap-2"><input type="checkbox" name="actif" value="1" {% if values.actif %}checked{% endif %}> En activité</label>
+  </div>
+  <div class="mt-6 grid gap-4">
+    {{ area_field('notes_terrain', 'Notes de terrain', values.notes_terrain, 'Ce que vous avez vu sur place') }}
+    {{ area_field('notes_maps', 'Notes Google Maps', values.notes_maps, 'Note, volume d’avis, horaires') }}
+    {{ area_field('notes_reseaux', 'Notes Instagram', values.notes_reseaux, 'Compte, lien en bio, fréquence de publication') }}
+  </div>
+  <div class="mt-6 flex gap-2">
+    <button class="rounded-xl bg-pine-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-pine-800">Créer la fiche</button>
+    <a href="/" class="inline-flex items-center rounded-xl px-4 py-2.5 text-sm font-semibold text-ink-500 hover:text-ink-900">Annuler</a>
+  </div>
+</form>
+{% endblock %}

@@ -1,0 +1,71 @@
+[x-cloak] { display: none !important; }
+
+html { color-scheme: light; }
+
+body {
+  background: #f3efe6;
+  color: #1c1916;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: #186552;
+}
+
+.status-pill,
+.status-select {
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: #efe8dc;
+  color: #4a4036;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  padding: 0.22rem 0.6rem;
+  white-space: nowrap;
+}
+
+.status-select {
+  appearance: none;
+  cursor: pointer;
+  font-weight: 600;
+  padding-right: 1.45rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath fill='none' stroke='%233a342e' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' d='M2.2 4.2 6 8l3.8-3.8'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.4rem center;
+  background-size: 10px;
+}
+
+.status-select:focus-visible,
+.nav-link:focus-visible,
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #186552;
+  outline-offset: 2px;
+}
+
+.status-pill[data-status="a_contacter"],
+.status-select[data-status="a_contacter"] { background: #efe8dc; color: #4a4036; }
+.status-pill[data-status="contacte"],
+.status-select[data-status="contacte"] { background: #e3eef6; color: #1d4d72; }
+.status-pill[data-status="rdv"],
+.status-select[data-status="rdv"] { background: #f8efd8; color: #8a5610; }
+.status-pill[data-status="client"],
+.status-select[data-status="client"] { background: #e3f3ec; color: #146049; }
+.status-pill[data-status="refuse"],
+.status-select[data-status="refuse"] { background: #f8e6e2; color: #8c3b32; }
+
+.street-card { break-inside: avoid; }
+
+@media print {
+  aside, .no-print { display: none !important; }
+  .shell { display: block !important; }
+  body { background: white !important; }
+  main { padding: 0 !important; }
+  .street-card { box-shadow: none !important; }
+}

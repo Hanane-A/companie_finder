@@ -1,0 +1,59 @@
+{% macro notice(kind, text) %}
+{% if text %}
+<div class="mb-6 rounded-2xl border px-4 py-3 text-sm {% if kind == 'error' %}border-red-200 bg-red-50 text-red-900{% elif kind == 'warn' %}border-clay-700/20 bg-clay-50 text-clay-700{% else %}border-pine-600/20 bg-pine-50 text-pine-800{% endif %}">
+  {{ text }}
+</div>
+{% endif %}
+{% endmacro %}
+
+{% macro text_field(name, label, value='', placeholder='', type='text', hint='') %}
+<label class="block">
+  <span class="mb-1.5 flex items-baseline justify-between gap-3">
+    <span class="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-500">{{ label }}</span>
+    {% if hint %}<span class="text-[11px] font-medium normal-case tracking-normal text-ink-400">{{ hint }}</span>{% endif %}
+  </span>
+  <input
+    class="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-400 focus:border-pine-600 focus:ring-4 focus:ring-pine-600/10"
+    type="{{ type }}"
+    name="{{ name }}"
+    value="{{ value or '' }}"
+    placeholder="{{ placeholder }}"
+  >
+</label>
+{% endmacro %}
+
+{% macro area_field(name, label, value='', placeholder='', rows=4) %}
+<label class="block">
+  <span class="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-500">{{ label }}</span>
+  <textarea
+    class="w-full resize-y rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm leading-6 text-ink-900 outline-none transition placeholder:text-ink-400 focus:border-pine-600 focus:ring-4 focus:ring-pine-600/10"
+    name="{{ name }}"
+    rows="{{ rows }}"
+    placeholder="{{ placeholder }}"
+  >{{ value or '' }}</textarea>
+</label>
+{% endmacro %}
+
+{% macro select_field(name, label, options, current) %}
+<label class="block">
+  <span class="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-500">{{ label }}</span>
+  <select name="{{ name }}" class="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none focus:border-pine-600 focus:ring-4 focus:ring-pine-600/10">
+    {% for value, option_label in options %}
+    <option value="{{ value }}" {% if value == current %}selected{% endif %}>{{ option_label }}</option>
+    {% endfor %}
+  </select>
+</label>
+{% endmacro %}
+
+{% macro statut_select(prospect_id, current) %}
+<select data-stop data-status="{{ current }}" class="status-select" aria-label="Statut de prospection" onchange="deskStatut(this, {{ prospect_id }})">
+  {% for value, option_label in STATUTS %}
+  <option value="{{ value }}" {% if value == current %}selected{% endif %}>{{ option_label }}</option>
+  {% endfor %}
+</select>
+{% endmacro %}
+
+{% macro source_badge(source) %}
+{% set labels = {'api_gouv': 'API Gouv', 'maps': 'Maps', 'reseaux': 'Réseaux sociaux'} %}
+<span class="inline-flex rounded-full bg-ink-950/5 px-2 py-0.5 text-[11px] font-semibold text-ink-700">{{ labels.get(source, source or '-') }}</span>
+{% endmacro %}
