@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% from "components.html" import score_badge, relance_badge, vue_switch %}
+
+{% block page_title %}Pipeline · COMPANIE FINDER{% endblock %}
+{% block eyebrow %}{{ counts.total }} prospect{{ 's' if counts.total != 1 }}{% endblock %}
+{% block heading %}Pipeline{% endblock %}
+{% block actions %}
+<a href="/prospects/nouveau" class="btn btn-ghost">Ajouter</a>
+{% endblock %}
+
+{% block content %}
+<div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+  <form method="get" action="/pipeline" class="flex min-w-0 flex-1 flex-wrap gap-2">
+    <div class="w-full sm:w-64"><input name="q" value="{{ filters.q }}" placeholder="Nom, rue, ville…" class="field" aria-label="Recherche"></div>
+    <div class="w-36"><input name="cp" value="{{ filters.cp }}" inputmode="numeric" placeholder="Code postal" class="field" aria-label="Code postal"></div>
+    <button class="btn btn-ghost">Filtrer</button>
+    {% if has_filters %}<a href="/pipeline" class="btn text-ink-500">Réinitialiser</a>{% endif %}
+  </form>
+  {{ vue_switch('pipeline', filters) }}
+</div>
+<p class="mb-3 text-sm text-ink-500">Glissez une carte dans une autre colonne pour changer son statut. Le changement est noté dans le journal.</p>
+
+<div class="kanban" id="kanban">
+  {% for col in colonnes %}
+  <section class="kanban-col" data-statut="{{ col.key }}" aria-label="{{ col.label }}">
+    <header class="mb-2 flex items-center justify-between gap-2 px-1">
+      <h2 class="flex items-center gap-2 text-sm font-bold text-ink-900"><span class="status-pill" data-status="{{ col.key }}">{{ col.label }}</span></h2>
+      <span class="text-sm font-bold text-ink-500" data-count>{{ col.total }}</span>
+    </header>
+    <ol class="flex flex-1 flex-col gap-2" data-dropzone>
+      {% for p in col.cartes %}
+      <li class="kanban-card" draggable="true" data-id="{{ p.id }}">
+        <a href="/prospects/{{ p.id }}" class="block font-semibold leading-snug text-ink-950 hover:text-pine-700">{{ p.nom_affiche }}</a>
+        <p class="mt-0.5 truncate text-xs text-ink-500">{{ p.ville or p.adresse }}</p>
+        <div class="mt-2 flex flex-wrap items-center gap-1.5">{{ score_badge(p) }}{{ relance_badge(p) }}</div>
+        <label class="mt-2 block">
+          <span class="sr-only">Changer le statut</span>
+          <select class="field py-1.5 text-xs" data-move>
+            {% for key, label in STATUTS %}<option value="{{ key }}" {% if key == p.statut %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </label>
+      </li>
+      {% endfor %}
+    </ol>
+    {% if col.total > col.cartes|length %}
+    <a href="/?statut={{ col.key }}" class="mt-2 block px-1 text-xs font-semibold text-pine-700">+ {{ col.total - col.cartes|length }} autres dans la liste</a>
+    {% endif %}
+  </section>
+  {% endfor %}
+</div>
+
+<script>
+(function () {
+  const board = document.getElementById('kanban');
+  let dragged = null;
+
+  async function move(card, statut) {
+    const from = card.closest('.kanban-col');
+    const to = board.querySelector(`.kanban-col[data-statut="${statut}"]`);
+    if (!to || from === to) return;
+    const select = card.querySelector('[data-move]');
+    to.querySelector('[data-dropzone]').prepend(card);
+    select.value = statut;
+    card.querySelectorAll('.status-pill').forEach((pill) => { pill.dataset.status = statut; });
+    recount();
+    try {
+      const response = await fetch(`/prospects/${card.dataset.id}/statut`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ statut }),
+      });
+      if (!response.ok) throw new Error('statut');
+    } catch (error) {
+      from.querySelector('[data-dropzone]').prepend(card);
+      select.value = from.dataset.statut;
+      recount();
+      alert('Le statut n’a pas pu être enregistré. Réessayez.');
+    }
+  }
+
+  function recount() {
+    board.querySelectorAll('.kanban-col').forEach((col) => {
+      const counter = col.querySelector('[data-count]');
+      const hidden = Number(counter.dataset.hidden || 0);
+      counter.textContent = col.querySelectorAll('.kanban-card').length + hidden;
+    });
+  }
+  board.querySelectorAll('.kanban-col').forEach((col) => {
+    const counter = col.querySelector('[data-count]');
+    counter.dataset.hidden = Number(counter.textContent) - col.querySelectorAll('.kanban-card').length;
+  });
+
+  board.addEventListener('dragstart', (event) => {
+    dragged = event.target.closest('.kanban-card');
+    if (!dragged) return;
+    dragged.classList.add('is-dragging');
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', dragged.dataset.id);
+  });
+  board.addEventListener('dragend', () => {
+    dragged?.classList.remove('is-dragging');
+    board.querySelectorAll('.is-over').forEach((el) => el.classList.remove('is-over'));
+    dragged = null;
+  });
+  board.addEventListener('dragover', (event) => {
+    const col = event.target.closest('.kanban-col');
+    if (!col || !dragged) return;
+    event.preventDefault();
+    board.querySelectorAll('.is-over').forEach((el) => el !== col && el.classList.remove('is-over'));
+    col.classList.add('is-over');
+  });
+  board.addEventListener('drop', (event) => {
+    const col = event.target.closest('.kanban-col');
+    if (!col || !dragged) return;
+    event.preventDefault();
+    col.classList.remove('is-over');
+    move(dragged, col.dataset.statut);
+  });
+  board.addEventListener('change', (event) => {
+    const select = event.target.closest('[data-move]');
+    if (select) move(select.closest('.kanban-card'), select.value);
+  });
+})();
+</script>
+{% endblock %}

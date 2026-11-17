@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass, field
 
 import httpx
@@ -25,8 +26,40 @@ HEADERS = {
     "Accept": "application/json",
 }
 PAGE_SIZE = 25
-NAF_MAX_PAGES = 8
-KEYWORD_MAX_PAGES = 2
+# L'API sert au plus 10 000 résultats par requête, soit 400 pages de 25.
+NAF_MAX_PAGES = 400
+KEYWORD_MAX_PAGES = 4
+# L'API autorise 7 appels par seconde : on garde une marge.
+REQUESTS_PER_SECOND = 6.0
+
+
+class RateLimiter:
+    """Espace les appels pour ne jamais dépasser un débit donné, toutes requêtes confondues."""
+
+    def __init__(self, per_second: float) -> None:
+        self.interval = 1.0 / per_second
+        self._next = 0.0
+        self._lock = asyncio.Lock()
+
+    async def wait(self) -> None:
+        async with self._lock:
+            now = time.monotonic()
+            delay = self._next - now
+            if delay > 0:
+                await asyncio.sleep(delay)
+                now = time.monotonic()
+            self._next = now + self.interval
+
+
+_limiter: RateLimiter | None = None
+
+
+def limiter() -> RateLimiter:
+    # Créé à la demande pour appartenir à la boucle asyncio en cours.
+    global _limiter
+    if _limiter is None:
+        _limiter = RateLimiter(REQUESTS_PER_SECOND)
+    return _limiter
 
 COWORKING_QUERIES = (
     {"q": "coworking", "naf": "96.02A"},
@@ -197,7 +230,6 @@ async def fetch_companies(
         companies.extend(batch)
         if not batch or page >= total_pages:
             break
-        await asyncio.sleep(0.1)
     return companies, reported, total_pages > pages_read
 
 
@@ -205,6 +237,7 @@ async def get_json(client: httpx.AsyncClient, params: dict) -> dict:
     cleaned = {key: value for key, value in params.items() if value not in (None, "")}
     last_status = None
     for attempt in range(4):
+        await limiter().wait()
         try:
             response = await client.get(SEARCH_URL, params=cleaned)
         except httpx.HTTPError as exc:

@@ -9,7 +9,7 @@
 {% macro text_field(name, label, value='', placeholder='', type='text', hint='') %}
 <label class="block">
   <span class="mb-1.5 flex items-baseline justify-between gap-3">
-    <span class="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-500">{{ label }}</span>
+    <span class="text-[11px] font-semibold text-ink-500">{{ label }}</span>
     {% if hint %}<span class="text-[11px] font-medium normal-case tracking-normal text-ink-400">{{ hint }}</span>{% endif %}
   </span>
   <input
@@ -24,7 +24,7 @@
 
 {% macro area_field(name, label, value='', placeholder='', rows=4) %}
 <label class="block">
-  <span class="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-500">{{ label }}</span>
+  <span class="mb-1.5 block text-[11px] font-semibold text-ink-500">{{ label }}</span>
   <textarea
     class="w-full resize-y rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm leading-6 text-ink-900 outline-none transition placeholder:text-ink-400 focus:border-pine-600 focus:ring-4 focus:ring-pine-600/10"
     name="{{ name }}"
@@ -36,7 +36,7 @@
 
 {% macro select_field(name, label, options, current) %}
 <label class="block">
-  <span class="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-500">{{ label }}</span>
+  <span class="mb-1.5 block text-[11px] font-semibold text-ink-500">{{ label }}</span>
   <select name="{{ name }}" class="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none focus:border-pine-600 focus:ring-4 focus:ring-pine-600/10">
     {% for value, option_label in options %}
     <option value="{{ value }}" {% if value == current %}selected{% endif %}>{{ option_label }}</option>
@@ -55,5 +55,61 @@
 
 {% macro source_badge(source) %}
 {% set labels = {'api_gouv': 'API Gouv', 'maps': 'Maps', 'reseaux': 'Réseaux sociaux'} %}
-<span class="inline-flex rounded-full bg-ink-950/5 px-2 py-0.5 text-[11px] font-semibold text-ink-700">{{ labels.get(source, source or '-') }}</span>
+<span class="inline-flex whitespace-nowrap rounded-full bg-ink-950/5 px-2 py-0.5 text-[11px] font-semibold text-ink-700">{{ labels.get(source, source or '-') }}</span>
+{% endmacro %}
+
+{% macro contact_block(values) %}
+<div class="grid gap-4 sm:grid-cols-2">
+  {{ text_field('contact_nom', 'Personne à voir', values.contact_nom, 'Prénom Nom') }}
+  {{ text_field('contact_role', 'Rôle', values.contact_role, 'Gérante, associé, employée…') }}
+  {{ text_field('telephone', 'Téléphone', values.telephone, '06 12 34 56 78', 'tel') }}
+  {{ text_field('email', 'Email', values.email, 'contact@salon.fr', 'email') }}
+  {{ text_field('instagram', 'Instagram', values.instagram, '@nom.du.salon ou lien') }}
+  {{ text_field('prochaine_action_at', 'Prochaine action le', values.prochaine_action_at, '', 'date') }}
+  <div class="sm:col-span-2">{{ text_field('prochaine_action', 'Prochaine action', values.prochaine_action, 'Rappeler pour fixer la démo, repasser mardi matin…') }}</div>
+</div>
+{% endmacro %}
+
+{% macro relance_badge(prospect) %}
+{% if prospect.prochaine_action_at %}
+<span class="inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold {% if prospect.relance_due %}bg-red-50 text-red-800{% else %}bg-pine-50 text-pine-800{% endif %}" title="{{ prospect.prochaine_action }}">
+  Relance le {{ prospect.prochaine_action_at | fr_date }}
+</span>
+{% endif %}
+{% endmacro %}
+
+{% macro score_badge(item) %}
+{% set labels = {'chaud': 'Chaud', 'tiede': 'Tiède', 'froid': 'Froid', 'client': 'Client', 'refuse': 'Refus'} %}
+{% if item.niveau in ('client', 'refuse') %}
+<span class="score-badge" data-niveau="{{ item.niveau }}">{{ labels[item.niveau] }}</span>
+{% else %}
+<span class="score-badge" data-niveau="{{ item.niveau }}" title="{% for texte, points in item.raisons %}{{ texte }}{% if points %} (+{{ points }}){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}">{{ labels.get(item.niveau, '') }} {{ item.score }}</span>
+{% endif %}
+{% endmacro %}
+
+{% macro score_details(item) %}
+<div class="mt-4 border-t border-line pt-4">
+  <div class="flex items-center justify-between gap-3">
+    <p class="text-[11px] font-semibold text-ink-500">Score HANUP Desk</p>
+    {{ score_badge(item) }}
+  </div>
+  {% if item.niveau not in ('client', 'refuse') %}
+  <div class="score-bar mt-2" aria-hidden="true"><span style="width: {{ item.score }}%" data-niveau="{{ item.niveau }}"></span></div>
+  {% endif %}
+  <ul class="mt-3 space-y-1.5 text-sm">
+    {% for texte, points in item.raisons %}
+    <li class="flex items-start justify-between gap-3">
+      <span class="text-ink-700">{{ texte }}</span>
+      <span class="shrink-0 font-mono text-xs {% if points %}text-pine-700{% else %}text-ink-400{% endif %}">{% if points %}+{{ points }}{% else %}0{% endif %}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endmacro %}
+
+{% macro vue_switch(current, filters) %}
+<div class="no-print flex items-center gap-1 rounded-xl border border-line bg-card p-1 text-sm font-semibold" role="group" aria-label="Affichage">
+  <a href="{{ page_href(filters, statut=filters.statut) }}" class="sort-tab {% if current == 'liste' %}sort-tab--on{% endif %}" {% if current == 'liste' %}aria-current="page"{% endif %}>Liste</a>
+  <a href="/pipeline{{ page_href(filters)[1:] if page_href(filters) != '/' else '' }}" class="sort-tab {% if current == 'pipeline' %}sort-tab--on{% endif %}" {% if current == 'pipeline' %}aria-current="page"{% endif %}>Pipeline</a>
+</div>
 {% endmacro %}

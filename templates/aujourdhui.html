@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% from "components.html" import notice %}
+
+{% block page_title %}Aujourd'hui · COMPANIE FINDER{% endblock %}
+{% block eyebrow %}{{ jour_label }}{% endblock %}
+{% block heading %}Aujourd'hui{% endblock %}
+{% block actions %}
+<a href="/tournee" class="inline-flex items-center rounded-xl bg-pine-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-pine-800">Préparer la tournée</a>
+{% endblock %}
+
+{% macro actions_rapides(item) %}
+<div class="mt-3 flex flex-wrap gap-2 text-sm font-semibold">
+  {% if item.links.tel %}<a href="{{ item.links.tel }}" class="quick-action bg-pine-700 px-4 text-white">Appeler</a>{% endif %}
+  {% if item.links.whatsapp %}<a href="{{ item.links.whatsapp }}" target="_blank" rel="noopener noreferrer" class="quick-action border border-line bg-white px-4">WhatsApp</a>{% endif %}
+  {% if item.maps %}<a href="{{ item.maps }}" target="_blank" rel="noopener noreferrer" class="quick-action border border-line bg-white px-4">Itinéraire</a>{% endif %}
+  <a href="/prospects/{{ item.id }}#journal" class="quick-action border border-line bg-white px-4">Noter le contact</a>
+</div>
+{% endmacro %}
+
+{% macro carte_relance(item, tone) %}
+<li class="today-card {% if tone == 'retard' %}today-card--late{% elif tone == 'jour' %}today-card--now{% endif %}">
+  <div class="flex items-start justify-between gap-3">
+    <div class="min-w-0">
+      <a href="/prospects/{{ item.id }}" class="font-semibold text-ink-950 hover:text-pine-700">{{ item.nom_affiche }}</a>
+      <p class="mt-0.5 truncate text-xs text-ink-500">{% if item.contact_nom %}{{ item.contact_nom }}, {% endif %}{{ item.adresse or item.ville or "Adresse inconnue" }}</p>
+    </div>
+    <span class="status-pill shrink-0" data-status="{{ item.statut }}">{{ STATUT_LABELS.get(item.statut, item.statut) }}</span>
+  </div>
+  <p class="mt-2 text-sm text-ink-800">
+    {% if tone == 'retard' %}<span class="font-semibold text-red-800">En retard de {{ item.retard_jours }} jour{% if item.retard_jours > 1 %}s{% endif %}</span>, {% elif tone == 'semaine' %}<span class="font-semibold text-ink-700">{{ item.prochaine_action_at | fr_date }}</span>, {% endif %}
+    {{ item.prochaine_action or "Relancer" }}
+  </p>
+  {{ actions_rapides(item) }}
+  <form method="post" action="/prospects/{{ item.id }}/reporter" class="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
+    <span class="mr-1 text-ink-500">Reporter :</span>
+    <button name="jours" value="1" class="postpone">Demain</button>
+    <button name="jours" value="3" class="postpone">+3 jours</button>
+    <button name="jours" value="7" class="postpone">+1 semaine</button>
+  </form>
+</li>
+{% endmacro %}
+
+{% block content %}
+{{ notice('ok', banner) }}
+
+{% for t in a_saisir %}
+<a href="/tournee/{{ t.id }}/saisie" class="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-clay-700/25 bg-clay-50 px-4 py-3 text-sm text-clay-700 hover:border-clay-700/50">
+  <span><strong>Tournée n° {{ t.id }} du {{ t.jour | fr_date }}</strong> à saisir, {{ t.arrets|length }} arrêts</span>
+  <span class="font-semibold">Saisir le retour →</span>
+</a>
+{% endfor %}
+
+<div class="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+  <a href="#retard" class="stat-tile {% if en_retard %}stat-tile--alert{% endif %}">
+    <span class="stat-label">En retard</span>
+    <span class="stat-value">{{ en_retard|length }}</span>
+  </a>
+  <a href="#jour" class="stat-tile">
+    <span class="stat-label">À relancer aujourd'hui</span>
+    <span class="stat-value">{{ du_jour|length }}</span>
+  </a>
+  <a href="#rdv" class="stat-tile">
+    <span class="stat-label">Rendez-vous (7 jours)</span>
+    <span class="stat-value">{{ rdv|length }}</span>
+  </a>
+  <div class="stat-tile">
+    <span class="stat-label">Contacts faits aujourd'hui</span>
+    <span class="stat-value">{{ activite.total }}</span>
+    {% if activite.total %}
+    <span class="mt-1 block text-xs text-ink-500">
+      {% set parts = [] %}{% for key, label in INTERACTIONS %}{% if activite.get(key) %}{% set _ = parts.append(label ~ ' : ' ~ activite[key]) %}{% endif %}{% endfor %}{{ parts|join(', ') }}
+    </span>
+    {% endif %}
+  </div>
+</div>
+
+{% set rien = not (en_retard or du_jour or rdv or oublis or a_venir or a_saisir) %}
+{% if rien %}
+<div class="rounded-3xl border border-dashed border-line bg-card px-6 py-16 text-center">
+  <p class="font-display text-2xl text-ink-950">Rien à relancer aujourd'hui</p>
+  <p class="mx-auto mt-2 max-w-md text-sm text-ink-500">Programmez une relance depuis une fiche, ou partez en tournée pour remplir le pipeline.</p>
+  <div class="mt-6 flex flex-wrap justify-center gap-2">
+    <a href="/tournee" class="inline-flex rounded-xl bg-pine-700 px-4 py-2.5 text-sm font-semibold text-white">Préparer la tournée</a>
+    <a href="/recherche" class="inline-flex rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-semibold">Chercher des prospects</a>
+  </div>
+</div>
+{% endif %}
+
+<div class="grid items-start gap-6 xl:grid-cols-2">
+  <div class="flex min-w-0 flex-col gap-6">
+    {% if rdv %}
+    <section id="rdv" class="today-section">
+      <h2 class="today-title">Rendez-vous à venir</h2>
+      <ul class="mt-3 flex flex-col gap-3">
+        {% for item in rdv %}
+        <li class="today-card today-card--rdv">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <p class="text-xs font-semibold text-pine-700">{{ item.rdv_at | fr_datetime }}, {{ INTERACTION_LABELS.get(item.rdv_type) }}</p>
+              <a href="/prospects/{{ item.id }}" class="mt-1 block font-semibold text-ink-950 hover:text-pine-700">{{ item.nom_affiche }}</a>
+              <p class="mt-0.5 truncate text-xs text-ink-500">{{ item.adresse or item.ville }}</p>
+            </div>
+            <span class="status-pill shrink-0" data-status="{{ item.statut }}">{{ STATUT_LABELS.get(item.statut, item.statut) }}</span>
+          </div>
+          {% if item.rdv_notes %}<p class="mt-2 text-sm text-ink-800">{{ item.rdv_notes }}</p>{% endif %}
+          {{ actions_rapides(item) }}
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+    {% if en_retard %}
+    <section id="retard" class="today-section">
+      <h2 class="today-title text-red-900">En retard <span class="today-count">{{ en_retard|length }}</span></h2>
+      <ul class="mt-3 flex flex-col gap-3">
+        {% for item in en_retard %}{{ carte_relance(item, 'retard') }}{% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+    {% if du_jour %}
+    <section id="jour" class="today-section">
+      <h2 class="today-title">À relancer aujourd'hui <span class="today-count">{{ du_jour|length }}</span></h2>
+      <ul class="mt-3 flex flex-col gap-3">
+        {% for item in du_jour %}{{ carte_relance(item, 'jour') }}{% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+  </div>
+
+  <div class="flex min-w-0 flex-col gap-6">
+    {% if oublis %}
+    <section class="today-section">
+      <h2 class="today-title">À ne pas oublier <span class="today-count">{{ oublis|length }}</span></h2>
+      <p class="mt-1 text-sm text-ink-500">Prospects intéressés sans aucune relance prévue.</p>
+      <ul class="mt-3 flex flex-col divide-y divide-line overflow-hidden rounded-2xl border border-line bg-card">
+        {% for item in oublis %}
+        <li class="flex items-center justify-between gap-3 px-4 py-3">
+          <div class="min-w-0">
+            <a href="/prospects/{{ item.id }}" class="font-semibold text-ink-950 hover:text-pine-700">{{ item.nom_affiche }}</a>
+            <p class="mt-0.5"><span class="status-pill" data-status="{{ item.statut }}">{{ STATUT_LABELS.get(item.statut, item.statut) }}</span></p>
+          </div>
+          <a href="/prospects/{{ item.id }}#journal" class="quick-action shrink-0 border border-line bg-white px-3 text-sm font-semibold">Programmer</a>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+    {% if a_venir %}
+    <section class="today-section">
+      <h2 class="today-title">Cette semaine <span class="today-count">{{ a_venir|length }}</span></h2>
+      <ul class="mt-3 flex flex-col divide-y divide-line overflow-hidden rounded-2xl border border-line bg-card">
+        {% for item in a_venir %}
+        <li class="flex items-center justify-between gap-3 px-4 py-3">
+          <div class="min-w-0">
+            <a href="/prospects/{{ item.id }}" class="font-semibold text-ink-950 hover:text-pine-700">{{ item.nom_affiche }}</a>
+            <p class="mt-0.5 truncate text-xs text-ink-500">{{ item.prochaine_action or "Relancer" }}</p>
+          </div>
+          <span class="shrink-0 text-sm font-semibold text-ink-700">{{ item.prochaine_action_at | fr_date }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "components.html" import notice, statut_select, source_badge %}
+{% from "components.html" import notice, statut_select, source_badge, relance_badge, score_badge, vue_switch %}
 
 {% block page_title %}Prospects · COMPANIE FINDER{% endblock %}
 {% block eyebrow %}Tableau de bord{% endblock %}
@@ -13,13 +13,14 @@
 <div x-data="prospectTable()">
   {{ notice(banner_kind, banner) }}
 
-  <div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-    {% for key, label in STATUTS %}
-    <a href="{{ page_href(filters, statut=key if filters.statut != key else '') }}" class="rounded-2xl border bg-card px-4 py-3 shadow-card transition hover:border-pine-600/40 {% if filters.statut == key %}border-pine-600 ring-2 ring-pine-600/15{% else %}border-line{% endif %}">
-      <span class="block text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-500">{{ label }}</span>
-      <span class="mt-1 block font-display text-3xl leading-none text-ink-950">{{ counts[key] }}</span>
-    </a>
-    {% endfor %}
+  <div class="mb-5 flex flex-wrap items-end justify-between gap-3">
+    <nav class="pipeline-strip min-w-0 flex-1" aria-label="Filtrer par statut">
+      <a href="{{ page_href(filters, statut='') }}" class="pipeline-step" {% if not filters.statut %}aria-current="true"{% endif %}><b>{{ counts.total }}</b><span>Tous</span></a>
+      {% for key, label in STATUTS %}
+      <a href="{{ page_href(filters, statut=key if filters.statut != key else '') }}" class="pipeline-step" {% if filters.statut == key %}aria-current="true"{% endif %}><b>{{ counts[key] }}</b><span>{{ label }}</span></a>
+      {% endfor %}
+    </nav>
+    {{ vue_switch('liste', filters) }}
   </div>
 
   <form method="get" action="/" class="no-print mb-4 flex flex-col gap-3 rounded-2xl border border-line bg-card p-3 shadow-card lg:flex-row lg:items-center">
@@ -42,25 +43,33 @@
     <input name="cp" value="{{ filters.cp }}" inputmode="numeric" placeholder="Code postal" class="w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm lg:w-32">
     <input name="ville" value="{{ filters.ville }}" placeholder="Ville" class="w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm lg:w-40">
     {% if filters.statut %}<input type="hidden" name="statut" value="{{ filters.statut }}">{% endif %}
+    {% if filters.tri %}<input type="hidden" name="tri" value="{{ filters.tri }}">{% endif %}
     <button class="rounded-xl bg-ink-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-ink-900">Filtrer</button>
     {% if has_filters %}<a href="/" class="px-2 text-sm font-semibold text-ink-500 hover:text-ink-900">Réinitialiser</a>{% endif %}
   </form>
 
-  <p class="mb-3 text-sm text-ink-500">
+  <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+  <p class="text-sm text-ink-500">
     <span x-text="shown">{{ rows|length }}</span><span class="text-ink-400"> / <span x-text="total">{{ rows|length }}</span></span>
     dans cette sélection
   </p>
+  <div class="no-print flex items-center gap-1 rounded-xl border border-line bg-card p-1 text-sm font-semibold" role="group" aria-label="Trier">
+    <a href="{{ page_href(filters, tri='') }}" class="sort-tab {% if not filters.tri %}sort-tab--on{% endif %}">Par nom</a>
+    <a href="{{ page_href(filters, tri='score') }}" class="sort-tab {% if filters.tri == 'score' %}sort-tab--on{% endif %}">Les plus prometteurs</a>
+  </div>
+  </div>
 
   {% if rows %}
   <div class="overflow-hidden rounded-2xl border border-line bg-card shadow-card">
     <div class="overflow-x-auto">
       <table class="w-full min-w-[920px] border-collapse text-left text-sm">
-        <thead class="bg-[#f7f3ec] text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-500">
+        <thead class="bg-[#f5f7f7] text-[11px] font-semibold text-ink-500">
           <tr>
             <th class="px-4 py-3 font-semibold">Nom / enseigne</th>
+            <th class="px-4 py-3 font-semibold">Score</th>
             <th class="px-4 py-3 font-semibold">Secteur</th>
             <th class="px-4 py-3 font-semibold">Adresse</th>
-            <th class="px-4 py-3 font-semibold">SIRET</th>
+            <th class="px-4 py-3 font-semibold">Contact / relance</th>
             <th class="px-4 py-3 font-semibold">Source</th>
             <th class="px-4 py-3 font-semibold">Statut</th>
           </tr>
@@ -74,6 +83,7 @@
               <p class="mt-0.5 text-xs text-ink-500">{{ prospect.nom }}</p>
               {% endif %}
             </td>
+            <td class="px-4 py-3 align-middle">{{ score_badge(prospect) }}</td>
             <td class="px-4 py-3 align-middle">
               <p>{{ prospect.secteur or "-" }}</p>
               <p class="mt-1 flex flex-wrap gap-1">
@@ -86,7 +96,10 @@
             <td class="max-w-xs px-4 py-3 align-middle">
               <p class="line-clamp-2 text-ink-800">{{ prospect.adresse or "-" }}</p>
             </td>
-            <td class="px-4 py-3 align-middle font-mono text-[13px] text-ink-700">{{ prospect.siret or "-" }}</td>
+            <td class="px-4 py-3 align-middle">
+              {% if prospect.telephone %}<a href="tel:{{ prospect.telephone | replace(' ', '') }}" class="font-mono text-[13px] text-ink-800 hover:text-pine-700">{{ prospect.telephone }}</a>{% elif prospect.contact_nom %}<span class="text-ink-800">{{ prospect.contact_nom }}</span>{% else %}<span class="text-ink-400">-</span>{% endif %}
+              <p class="mt-1">{{ relance_badge(prospect) }}</p>
+            </td>
             <td class="px-4 py-3 align-middle">{{ source_badge(prospect.source) }}</td>
             <td class="px-4 py-3 align-middle" data-stop onclick="event.stopPropagation()">{{ statut_select(prospect.id, prospect.statut) }}</td>
           </tr>

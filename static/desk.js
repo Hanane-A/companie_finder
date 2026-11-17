@@ -58,6 +58,7 @@ function prospectTable() {
 function pickProspects(mode) {
   document.querySelectorAll("[data-pick]").forEach((input) => {
     if (mode === "new") input.checked = input.dataset.known === "0";
+    else if (mode === "promising") input.checked = input.dataset.known === "0" && input.dataset.niveau !== "froid";
     else if (mode === "none") input.checked = false;
     else input.checked = true;
   });

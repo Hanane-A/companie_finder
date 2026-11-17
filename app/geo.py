@@ -195,6 +195,28 @@ async def _ban_lookup(client: httpx.AsyncClient, query: str) -> dict | None:
     return features[0].get("properties") or None
 
 
+async def geocode(client: httpx.AsyncClient, query: str) -> tuple[float, float] | None:
+    """Coordonnées d'une adresse via la Base Adresse Nationale, ou None."""
+    query = " ".join((query or "").split())
+    if len(query) < 3:
+        return None
+    try:
+        response = await client.get(BAN_URL, params={"q": query, "limit": 1})
+        response.raise_for_status()
+        features = response.json().get("features") or []
+    except (httpx.HTTPError, ValueError):
+        return None
+    if not features:
+        return None
+    feature = features[0]
+    if float((feature.get("properties") or {}).get("score") or 0) < 0.4:
+        return None
+    lon, lat = (feature.get("geometry") or {}).get("coordinates") or (None, None)
+    if lat is None or lon is None:
+        return None
+    return float(lat), float(lon)
+
+
 def _ambiguous(communes: list[dict]) -> str:
     labels = []
     for item in communes:

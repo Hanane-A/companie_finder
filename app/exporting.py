@@ -36,6 +36,14 @@ COLUMNS = (
     "Notes terrain",
     "Notes Google Maps",
     "Notes Instagram",
+    "Contact",
+    "Rôle",
+    "Téléphone",
+    "Email",
+    "Instagram",
+    "Prochaine action",
+    "Date prochaine action",
+    "Dernier contact",
 )
 
 
@@ -78,6 +86,14 @@ def render_csv(rows: list[dict]) -> bytes:
                 csv_safe(row.get("notes_terrain")),
                 csv_safe(row.get("notes_maps")),
                 csv_safe(row.get("notes_reseaux")),
+                csv_safe(row.get("contact_nom")),
+                csv_safe(row.get("contact_role")),
+                csv_safe(row.get("telephone")),
+                csv_safe(row.get("email")),
+                csv_safe(row.get("instagram")),
+                csv_safe(row.get("prochaine_action")),
+                csv_safe(fr_date(row.get("prochaine_action_at"))),
+                csv_safe(fr_date((row.get("dernier_contact_at") or "")[:10])),
             ]
         )
     return buffer.getvalue().encode("utf-8-sig")

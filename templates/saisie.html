@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% from "components.html" import notice %}
+
+{% block page_title %}Saisie de la tournée · COMPANIE FINDER{% endblock %}
+{% block eyebrow %}Tournée n° {{ tournee.id }}, {{ jour_label }}{% endblock %}
+{% block heading %}Saisir le retour{% endblock %}
+{% block actions %}
+<a href="/tournee/{{ tournee.id }}/impression" class="inline-flex items-center rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-semibold shadow-sm hover:bg-paper">Revoir la feuille</a>
+{% endblock %}
+
+{% block content %}
+{% if tournee.saisie_at %}{{ notice('warn', 'Cette tournée a déjà été saisie. Une nouvelle saisie ajoute de nouveaux passages au journal.') }}{% endif %}
+{% if errors %}{{ notice('error', 'Certaines lignes sont à corriger (en rouge). Rien n’a encore été enregistré.') }}{% endif %}
+<p class="mb-5 max-w-2xl text-sm text-ink-500">Recopiez votre feuille, dans le même ordre. Seuls les champs remplis sont enregistrés : un champ vide ne remplace jamais une information déjà connue.</p>
+
+<form method="post" action="/tournee/{{ tournee.id }}/saisie" class="flex flex-col gap-3">
+  {% for s in stops %}
+  {% set v = values.get(s.id, {}) %}
+  <section class="stop-card {% if errors.get(s.id) %}stop-card--late{% endif %}">
+    <div class="flex items-start gap-3">
+      <span class="stop-number" data-niveau="{{ s.niveau }}">{{ s.numero }}</span>
+      <div class="min-w-0 flex-1">
+        <div class="flex flex-wrap items-baseline justify-between gap-x-3">
+          <a href="/prospects/{{ s.id }}" class="font-semibold text-ink-950 hover:text-pine-700">{{ s.nom_affiche }}</a>
+          <span class="text-xs text-ink-500">prévu à {{ s.heure }}, {{ STATUT_LABELS.get(s.statut, s.statut) }}</span>
+        </div>
+        <p class="text-xs text-ink-500">{{ s.adresse or s.ville }}</p>
+        {% if errors.get(s.id) %}<p class="mt-2 text-sm font-semibold text-red-800">{{ errors[s.id] }}</p>{% endif %}
+
+        <fieldset class="mt-3">
+          <legend class="sr-only">Résultat</legend>
+          <div class="flex flex-wrap gap-1.5">
+            {% for value, label in resultats %}
+            <label class="chip"><input type="radio" name="resultat_{{ s.id }}" value="{{ value }}" class="sr-only" {% if (v.resultat or '') == value %}checked{% endif %}><span>{{ label }}</span></label>
+            {% endfor %}
+          </div>
+        </fieldset>
+
+        <div class="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <label class="flex items-center gap-2 text-xs text-ink-500">Heure<input name="heure_{{ s.id }}" value="{{ v.heure or '' }}" type="time" class="field" aria-label="Heure de passage" title="Vide = heure prévue ({{ s.heure }})"></label>
+          <input name="contact_nom_{{ s.id }}" value="{{ v.contact_nom or '' }}" placeholder="{{ ('Contact déjà noté : ' ~ s.contact_nom) if s.contact_nom else 'Nom du contact' }}" class="field">
+          <input name="telephone_{{ s.id }}" value="{{ v.telephone or '' }}" type="tel" placeholder="{{ ('Déjà noté : ' ~ s.telephone) if s.telephone else 'Téléphone' }}" class="field">
+          <input name="email_{{ s.id }}" value="{{ v.email or '' }}" type="email" placeholder="{{ ('Déjà noté : ' ~ s.email) if s.email else 'Email' }}" class="field">
+          <input name="instagram_{{ s.id }}" value="{{ v.instagram or '' }}" placeholder="{{ ('Déjà noté : @' ~ s.instagram) if s.instagram else 'Instagram' }}" class="field">
+          <select name="outil_{{ s.id }}" class="field" aria-label="Outil de réservation">
+            <option value="">Outil : {{ OUTIL_LABELS.get(s.outil_reservation) if s.outil_reservation else 'inchangé' }}</option>
+            {% for value in outils_terrain %}<option value="{{ value }}" {% if v.outil == value %}selected{% endif %}>{{ OUTIL_LABELS.get(value, value) }}</option>{% endfor %}
+          </select>
+          <label class="text-xs text-ink-500 lg:col-span-2">Si RDV pris : date et heure
+            <input name="rdv_at_{{ s.id }}" value="{{ v.rdv_at or '' }}" type="datetime-local" class="field mt-1">
+          </label>
+          <textarea name="notes_{{ s.id }}" rows="2" placeholder="Notes de la feuille" class="field sm:col-span-2 lg:col-span-4">{{ v.notes or '' }}</textarea>
+        </div>
+      </div>
+    </div>
+  </section>
+  {% endfor %}
+  <div class="sticky bottom-4 flex justify-end">
+    <button class="rounded-xl bg-pine-700 px-6 py-3 text-sm font-semibold text-white shadow-card hover:bg-pine-800">Enregistrer la tournée</button>
+  </div>
+</form>
+{% endblock %}

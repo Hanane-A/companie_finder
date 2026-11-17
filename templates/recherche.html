@@ -11,17 +11,17 @@
   <form method="post" action="/recherche" class="rounded-3xl border border-line bg-card p-5 shadow-card sm:p-7" x-data="{ loading: false }" @submit="loading = true">
     <div class="grid gap-4 sm:grid-cols-3">
       <label class="block">
-        <span class="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-500">Code postal</span>
+        <span class="mb-1.5 block text-[11px] font-semibold text-ink-500">Code postal</span>
         <input name="code_postal" value="{{ form.code_postal }}" inputmode="numeric" autocomplete="postal-code" placeholder="59100" class="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-pine-600 focus:ring-4 focus:ring-pine-600/10">
       </label>
       <label class="block sm:col-span-2">
-        <span class="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-500">Ville</span>
+        <span class="mb-1.5 block text-[11px] font-semibold text-ink-500">Ville</span>
         <input name="ville" value="{{ form.ville }}" autocomplete="address-level2" placeholder="Roubaix" class="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-pine-600 focus:ring-4 focus:ring-pine-600/10">
       </label>
     </div>
     <label class="mt-4 block">
       <span class="mb-1.5 flex items-baseline justify-between gap-3">
-        <span class="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-500">Quartier ou rue</span>
+        <span class="text-[11px] font-semibold text-ink-500">Quartier ou rue</span>
         <button type="button" class="text-[11px] font-semibold normal-case tracking-normal text-pine-700" onclick="document.querySelector('[name=code_postal]').value='59100'">Exemple : 59100</button>
       </span>
       <input name="quartier" value="{{ form.quartier }}" placeholder="Wazemmes, rue de la Paix…" class="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-pine-600 focus:ring-4 focus:ring-pine-600/10">
@@ -32,7 +32,7 @@
     </label>
 
     <fieldset class="mt-8">
-      <legend class="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-500">Secteurs</legend>
+      <legend class="text-[11px] font-semibold text-ink-500">Secteurs</legend>
       <div class="mt-3 grid gap-2 sm:grid-cols-2">
         {% for sector in SECTEURS %}
         <label class="cursor-pointer">
@@ -59,7 +59,7 @@
 
     <button type="submit" class="mt-6 inline-flex w-full items-center justify-center rounded-xl bg-pine-700 px-4 py-3 text-sm font-semibold text-white hover:bg-pine-800 disabled:cursor-wait disabled:opacity-70" :disabled="loading">
       <span x-show="!loading">Interroger SIRENE</span>
-      <span x-cloak x-show="loading">Lecture du fichier officiel…</span>
+      <span x-cloak x-show="loading">Lecture du fichier officiel… (une grande ville peut prendre une minute)</span>
     </button>
     <p class="mt-3 text-center text-xs leading-5 text-ink-500">L'API répond par pages de 25. Une grande ville peut prendre quelques secondes. L'adresse retenue est celle de l'établissement local, pas du siège.</p>
   </form>

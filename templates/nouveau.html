@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "components.html" import notice, text_field, area_field, select_field %}
+{% from "components.html" import notice, text_field, area_field, select_field, contact_block %}
 
 {% block page_title %}Nouveau prospect · COMPANIE FINDER{% endblock %}
 {% block eyebrow %}Ajout manuel{% endblock %}
@@ -30,6 +30,10 @@
     <label class="inline-flex items-center gap-2"><input type="checkbox" name="independant" value="1" {% if values.independant %}checked{% endif %}> Indépendant / freelance</label>
     <label class="inline-flex items-center gap-2"><input type="checkbox" name="coworking" value="1" {% if values.coworking %}checked{% endif %}> Coworking beauté</label>
     <label class="inline-flex items-center gap-2"><input type="checkbox" name="actif" value="1" {% if values.actif %}checked{% endif %}> En activité</label>
+  </div>
+  <div class="mt-8 border-t border-line pt-6">
+    <h3 class="mb-4 text-sm font-semibold">Contact</h3>
+    {{ contact_block(values) }}
   </div>
   <div class="mt-6 grid gap-4">
     {{ area_field('notes_terrain', 'Notes de terrain', values.notes_terrain, 'Ce que vous avez vu sur place') }}

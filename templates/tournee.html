@@ -1,62 +1,269 @@
 {% extends "base.html" %}
-{% from "components.html" import source_badge %}
+{% from "components.html" import notice, score_badge %}
 
 {% block page_title %}Tournée · COMPANIE FINDER{% endblock %}
-{% block eyebrow %}{{ zone or "Toutes les fiches" }}{% endblock %}
-{% block heading %}{% if stops %}{{ stops|length }} arrêt{% if stops|length != 1 %}s{% endif %}{% else %}Tournée{% endif %}{% endblock %}
+{% block eyebrow %}{% set zone = [filters.cp, filters.ville, filters.q]|select|join(', ') %}{{ zone or "Toutes les fiches" }}{% endblock %}
+{% block heading %}{% if etapes %}{{ etapes|length }} arrêt{% if etapes|length != 1 %}s{% endif %}{% else %}Tournée{% endif %}{% endblock %}
 {% block actions %}
 <a href="{{ export_href }}" class="no-print inline-flex items-center rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-semibold shadow-sm hover:bg-paper">Exporter</a>
-<button type="button" class="no-print inline-flex items-center rounded-xl bg-pine-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-pine-800" onclick="window.print()">Imprimer</button>
+{% if etapes %}<button type="submit" form="imprimer-form" class="no-print inline-flex items-center rounded-xl bg-pine-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-pine-800">Imprimer la tournée</button>{% endif %}
 {% endblock %}
 
 {% block content %}
-<p class="mb-5 hidden text-sm print:block">COMPANIE FINDER - tournée{% if zone %} · {{ zone }}{% endif %}</p>
-<form method="get" action="/tournee" class="no-print mb-6 grid gap-3 rounded-2xl border border-line bg-card p-3 shadow-card md:grid-cols-4">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+{% if error %}{{ notice('warn', error) }}{% endif %}
+
+<form method="get" action="/tournee" id="tournee-form" class="no-print mb-6 rounded-2xl border border-line bg-card shadow-card">
   <input type="hidden" name="filtre" value="1">
-  <input name="cp" value="{{ filters.cp }}" placeholder="Code postal" class="rounded-xl border border-line bg-white px-3 py-2.5 text-sm">
-  <input name="ville" value="{{ filters.ville }}" placeholder="Ville" class="rounded-xl border border-line bg-white px-3 py-2.5 text-sm">
-  <input name="q" value="{{ filters.q }}" placeholder="Rue, nom, quartier" class="rounded-xl border border-line bg-white px-3 py-2.5 text-sm md:col-span-2">
-  <select name="secteur" class="rounded-xl border border-line bg-white px-3 py-2.5 text-sm md:col-span-2">
-    <option value="">Tous les secteurs</option>
-    {% for sector in SECTEURS %}
-    <option value="{{ sector.id }}" {% if filters.secteur == sector.id %}selected{% endif %}>{{ sector.label }}</option>
-    {% endfor %}
-  </select>
-  <label class="flex items-center gap-2 text-sm md:col-span-1"><input type="checkbox" name="masquer_refuses" value="1" {% if masquer_refuses %}checked{% endif %}> Masquer les refus</label>
-  <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="masquer_clients" value="1" {% if masquer_clients %}checked{% endif %}> Masquer les clients</label>
-  <button class="rounded-xl bg-ink-950 px-4 py-2.5 text-sm font-semibold text-white md:col-span-4">Préparer la tournée</button>
+  <input type="hidden" name="depart_lat" value="{{ '%.6f'|format(options.depart_lat) if options.depart_lat is not none else '' }}">
+  <input type="hidden" name="depart_lon" value="{{ '%.6f'|format(options.depart_lon) if options.depart_lon is not none else '' }}">
+  <details {% if not etapes %}open{% endif %} class="group">
+    <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+      <span class="text-sm font-semibold text-ink-950">Réglages de la tournée</span>
+      <span class="text-xs text-ink-500">
+        {% for value, label in modes %}{% if value == options.mode %}{{ label }}{% endif %}{% endfor %}, départ {{ options.heure_depart }}, {{ options.visite }} min par arrêt
+      </span>
+    </summary>
+    <div class="grid gap-5 border-t border-line p-4 lg:grid-cols-2">
+      <fieldset class="grid gap-3 sm:grid-cols-2">
+        <legend class="mb-2 text-[11px] font-semibold text-ink-500">Zone</legend>
+        <input name="cp" value="{{ filters.cp }}" inputmode="numeric" placeholder="Code postal" class="field">
+        <input name="ville" value="{{ filters.ville }}" placeholder="Ville" class="field">
+        <input name="q" value="{{ filters.q }}" placeholder="Rue, nom, quartier" class="field sm:col-span-2">
+        <select name="secteur" class="field">
+          <option value="">Tous les secteurs</option>
+          {% for sector in SECTEURS %}<option value="{{ sector.id }}" {% if filters.secteur == sector.id %}selected{% endif %}>{{ sector.label }}</option>{% endfor %}
+        </select>
+        <select name="niveau" class="field">
+          <option value="">Tous les scores</option>
+          <option value="tiede" {% if options.niveau == 'tiede' %}selected{% endif %}>Tièdes et chauds</option>
+          <option value="chaud" {% if options.niveau == 'chaud' %}selected{% endif %}>Chauds seulement</option>
+        </select>
+      </fieldset>
+
+      <fieldset>
+        <legend class="mb-2 text-[11px] font-semibold text-ink-500">Déplacement</legend>
+        <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {% for value, label in modes %}
+          <label class="chip"><input type="radio" name="mode" value="{{ value }}" class="sr-only" {% if value == options.mode %}checked{% endif %}><span class="w-full justify-center">{{ label }}</span></label>
+          {% endfor %}
+        </div>
+        <div class="mt-3 flex flex-col gap-2 sm:flex-row">
+          <button type="button" class="chip-btn shrink-0" data-geoloc>
+            <span data-geoloc-label>{% if options.depart_lat is not none %}Départ : votre position ✓{% else %}Partir de ma position{% endif %}</span>
+          </button>
+          <input name="depart_adresse" value="{{ options.depart_adresse }}" placeholder="ou une adresse de départ" class="field flex-1">
+        </div>
+      </fieldset>
+
+      <fieldset class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <legend class="mb-2 text-[11px] font-semibold text-ink-500">Horaires</legend>
+        <label class="text-xs text-ink-500">Départ<input type="time" name="heure_depart" value="{{ options.heure_depart }}" class="field mt-1"></label>
+        <label class="text-xs text-ink-500">Fin souhaitée<input type="time" name="heure_fin" value="{{ options.heure_fin }}" class="field mt-1"></label>
+        <label class="text-xs text-ink-500">Minutes par arrêt<input type="number" min="0" max="120" name="visite" value="{{ options.visite }}" class="field mt-1"></label>
+        <label class="text-xs text-ink-500">Arrêts max<input type="number" min="1" max="50" name="max_arrets" value="{{ options.max_arrets }}" class="field mt-1"></label>
+      </fieldset>
+
+      <fieldset class="flex flex-wrap content-start gap-x-5 gap-y-2 text-sm">
+        <legend class="mb-2 text-[11px] font-semibold text-ink-500">Options</legend>
+        <label class="inline-flex items-center gap-2"><input type="checkbox" name="retour" value="1" {% if options.retour %}checked{% endif %}> Revenir au départ</label>
+        <label class="inline-flex items-center gap-2"><input type="checkbox" name="masquer_faits" value="1" {% if options.masquer_faits %}checked{% endif %}> Masquer les passages faits aujourd'hui</label>
+        <label class="inline-flex items-center gap-2"><input type="checkbox" name="masquer_refuses" value="1" {% if options.masquer_refuses %}checked{% endif %}> Masquer les refus</label>
+        <label class="inline-flex items-center gap-2"><input type="checkbox" name="masquer_clients" value="1" {% if options.masquer_clients %}checked{% endif %}> Masquer les clients</label>
+      </fieldset>
+    </div>
+    <div class="border-t border-line p-4">
+      <button class="w-full rounded-xl bg-pine-700 px-4 py-3 text-sm font-semibold text-white hover:bg-pine-800">Calculer la tournée</button>
+    </div>
+  </details>
 </form>
 
-{% if groups %}
-<div class="mx-auto flex max-w-3xl flex-col gap-4">
-  {% for group in groups %}
-  <section class="street-card rounded-2xl border border-line bg-card shadow-card">
-    <header class="flex items-center justify-between gap-3 border-b border-line px-5 py-3">
-      <h2 class="font-semibold text-ink-950">{{ group.rue }}</h2>
-      <span class="text-xs font-medium text-ink-500">{{ group.stops|length }} arrêt{% if group.stops|length != 1 %}s{% endif %}</span>
-    </header>
-    <ol>
-      {% for stop in group.stops %}
-      <li class="flex items-start justify-between gap-4 border-t border-line/70 px-5 py-3 first:border-t-0">
-        <div class="flex min-w-0 gap-3">
-          <span class="w-12 shrink-0 pt-0.5 font-mono text-sm text-ink-400">{{ stop.numero_voie or "–" }}</span>
-          <div class="min-w-0">
-            <a href="/prospects/{{ stop.id }}" class="font-semibold text-ink-950 hover:text-pine-700">{{ stop.nom_affiche }}</a>
-            <p class="text-xs text-ink-500">{{ stop.secteur or "Secteur non précisé" }}{% if stop.adresse %} · {{ stop.adresse }}{% endif %}</p>
-          </div>
-        </div>
-        <span class="status-pill shrink-0" data-status="{{ stop.statut }}">{{ STATUT_LABELS.get(stop.statut, stop.statut) }}</span>
-      </li>
-      {% endfor %}
-    </ol>
-  </section>
-  {% endfor %}
+{% if etapes %}
+<section class="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
+  <div class="stat-tile"><span class="stat-label">Arrêts</span><span class="stat-value">{{ etapes|length }}</span></div>
+  <div class="stat-tile"><span class="stat-label">Trajet</span><span class="stat-value text-[1.6rem]">{{ plan.trajet_min | duree }}</span></div>
+  <div class="stat-tile"><span class="stat-label">Distance</span><span class="stat-value text-[1.6rem]">{{ plan.distance_m | km }}</span></div>
+  <div class="stat-tile"><span class="stat-label">Sur place</span><span class="stat-value text-[1.6rem]">{{ plan.sur_place_min | duree }}</span></div>
+  <div class="stat-tile col-span-2 lg:col-span-1"><span class="stat-label">Fin estimée</span><span class="stat-value text-[1.6rem]">{{ plan.fin.strftime('%H:%M') }}</span></div>
+</section>
+
+<div class="no-print mb-4 flex flex-col gap-2 text-sm text-ink-500">
+  <p>
+    Départ : <strong class="text-ink-800">{{ depart_label }}</strong>.
+    {% if plan.source == 'openrouteservice' %}Temps de trajet réels (OpenRouteService).{% elif options.mode == 'transports' %}Temps estimés, attente comprise : vérifiez dans Google Maps.{% else %}Temps estimés d'après la distance.{% endif %}
+  </p>
+  {% set hors = etapes|selectattr('visit.hors_creneau')|list %}
+  {% if hors %}<p class="font-semibold text-red-800">{{ hors|length }} arrêt{{ 's' if hors|length > 1 }} après {{ options.heure_fin }} : réduisez le nombre d'arrêts ou le temps par arrêt.</p>{% endif %}
+  {% if hors_selection %}<p>{{ hors_selection }} autre{{ 's' if hors_selection > 1 }} prospect{{ 's' if hors_selection > 1 }} dans cette zone : augmentez « Arrêts max » ou filtrez par score.</p>{% endif %}
+  {% if nb_faits and options.masquer_faits %}<p>{{ nb_faits }} passage{{ 's' if nb_faits > 1 }} déjà fait{{ 's' if nb_faits > 1 }} aujourd'hui, masqué{{ 's' if nb_faits > 1 }}.</p>{% endif %}
 </div>
-{% else %}
+
+<form method="post" action="/tournee/imprimer" id="imprimer-form" class="hidden">
+  <input type="hidden" name="mode" value="{{ options.mode }}">
+  <input type="hidden" name="depart_label" value="{{ depart_label }}">
+  {% for item in etapes %}<input type="hidden" name="arret" value="{{ item.id }}|{{ item.visit.arrival.strftime('%H:%M') }}">{% endfor %}
+</form>
+
+<div class="no-print mb-4 flex flex-wrap gap-2">
+  <button type="submit" form="imprimer-form" class="quick-action bg-pine-700 px-4 text-sm font-semibold text-white">Imprimer la tournée et les fiches</button>
+  <button type="button" class="quick-action bg-ink-950 px-4 text-sm font-semibold text-white" data-recalcul>Recalculer depuis ma position</button>
+  {% set liens = gmaps[:3] if options.mode == 'transports' else gmaps %}
+  {% for url in liens %}
+  <a href="{{ url }}" target="_blank" rel="noopener noreferrer" class="quick-action border border-line bg-white px-4 text-sm font-semibold">{% if gmaps|length == 1 %}Ouvrir dans Google Maps{% elif options.mode == 'transports' %}Trajet {{ loop.index }}{% else %}Google Maps, partie {{ loop.index }}{% endif %}</a>
+  {% endfor %}
+  {% if liens|length < gmaps|length %}<span class="self-center text-xs text-ink-400">Les trajets suivants sont sur chaque arrêt (« Y aller »).</span>{% endif %}
+</div>
+
+<div id="carte" class="no-print mb-6 h-[340px] overflow-hidden rounded-2xl border border-line bg-[#e4e9e8] sm:h-[420px]" role="img" aria-label="Carte de la tournée"></div>
+
+<ol id="etapes" class="flex flex-col gap-3">
+  {% for item in etapes %}
+  {% set visit = item.visit %}
+  <li class="stop-card {% if visit.hors_creneau %}stop-card--late{% endif %} {% if loop.first %}now-mark{% endif %}">
+    <div class="flex items-start gap-3">
+      <span class="stop-number" data-niveau="{{ item.niveau }}">{{ visit.order }}</span>
+      <div class="min-w-0 flex-1">
+        <div class="flex flex-wrap items-baseline justify-between gap-x-3">
+          <p class="text-sm"><span class="eta {% if visit.hors_creneau %}eta--late{% endif %}">{{ visit.arrival.strftime('%H:%M') }}</span>{% if visit.hors_creneau %} <span class="text-xs font-semibold text-red-800">après {{ options.heure_fin }}</span>{% endif %}</p>
+          <p class="text-xs text-ink-500">
+            {% if visit.leg.metres < 1 %}même adresse{% else %}{{ visit.leg.minutes | duree }} {% if visit.leg.a_pied %}à pied{% elif options.mode == 'transports' %}en transports{% elif options.mode == 'velo' %}à vélo{% else %}en voiture{% endif %}, {{ visit.leg.metres | km }}{% endif %}
+          </p>
+        </div>
+        <a href="/prospects/{{ item.id }}" class="mt-0.5 block font-semibold text-ink-950 hover:text-pine-700">{{ item.nom_affiche }}</a>
+        <p class="text-xs text-ink-500">{{ item.adresse or item.ville }}</p>
+        <p class="mt-1.5 flex flex-wrap items-center gap-1.5">
+          {{ score_badge(item) }}
+          <span class="status-pill" data-status="{{ item.statut }}">{{ STATUT_LABELS.get(item.statut, item.statut) }}</span>
+          {% if item.outil_reservation %}<span class="text-xs text-ink-500">Outil : {{ OUTIL_LABELS.get(item.outil_reservation, '') }}</span>{% endif %}
+        </p>
+        {% if item.prochaine_action %}<p class="mt-1.5 text-sm text-ink-800">{{ item.prochaine_action }}</p>{% endif %}
+        {% if item.notes_terrain %}<p class="mt-1 line-clamp-2 text-xs text-ink-500">{{ item.notes_terrain }}</p>{% endif %}
+
+        <div class="no-print mt-3 flex flex-wrap gap-2 text-sm font-semibold">
+          {% if item.itineraire %}<a href="{{ item.itineraire }}" target="_blank" rel="noopener noreferrer" class="quick-action bg-pine-700 px-4 text-white">Y aller</a>{% endif %}
+          {% if item.links.tel %}<a href="{{ item.links.tel }}" class="quick-action border border-line bg-white px-4">Appeler</a>{% endif %}
+          <a href="/prospects/{{ item.id }}" class="quick-action border border-line bg-white px-4">Fiche</a>
+        </div>
+
+        {% if options.mode == 'pied' and visit.leg.minutes > 40 %}
+        <p class="mt-2 rounded-lg bg-clay-50 px-2.5 py-1.5 text-xs font-semibold text-clay-700">Trajet long à pied : prenez les transports ou filtrez par code postal.</p>
+        {% endif %}
+        <details class="no-print mt-3 rounded-xl bg-paper" {% if loop.first %}open{% endif %}>
+        <summary class="cursor-pointer list-none px-2.5 py-2 text-[11px] font-semibold text-ink-500">{% if loop.first %}Prochain arrêt, résultat du passage{% else %}Noter le résultat du passage{% endif %}</summary>
+        <form method="post" action="/tournee/passage/{{ item.id }}" class="px-2.5 pb-2.5">
+          <input type="hidden" name="retour" value="{{ retour_url }}">
+          <input name="notes" placeholder="Note rapide (facultatif)" class="field mb-2 bg-white">
+          <div class="grid grid-cols-2 gap-1.5 sm:grid-cols-5">
+            <button name="resultat" value="absent" class="outcome">Décideur absent</button>
+            <button name="resultat" value="interesse" class="outcome outcome--good">Intéressé</button>
+            <button name="resultat" value="rdv" class="outcome outcome--good">RDV pris</button>
+            <button name="resultat" value="plus_tard" class="outcome">Plus tard</button>
+            <button name="resultat" value="refus" class="outcome outcome--bad col-span-2 sm:col-span-1">Pas intéressé</button>
+          </div>
+        </form>
+        </details>
+      </div>
+    </div>
+  </li>
+  {% endfor %}
+</ol>
+{% elif not unplaced %}
 <div class="rounded-3xl border border-dashed border-line bg-card px-6 py-16 text-center">
+  {% if nb_faits and options.masquer_faits %}
+  <p class="font-display text-2xl text-ink-950">Tournée terminée</p>
+  <p class="mx-auto mt-2 max-w-md text-sm text-ink-500">{{ nb_faits }} passage{{ 's' if nb_faits > 1 }} déjà fait{{ 's' if nb_faits > 1 }} aujourd'hui dans cette zone. Élargissez la zone pour continuer.</p>
+  {% else %}
   <p class="font-display text-2xl text-ink-950">Aucun arrêt</p>
-  <p class="mx-auto mt-2 max-w-md text-sm text-ink-500">Importez des prospects, ou élargissez le code postal. Les refus sont masqués par défaut.</p>
+  <p class="mx-auto mt-2 max-w-md text-sm text-ink-500">Aucun prospect ne correspond à ces réglages. Élargissez la zone ou le score, ou importez des salons.</p>
+  {% endif %}
   <a href="/recherche" class="mt-6 inline-flex rounded-xl bg-pine-700 px-4 py-2.5 text-sm font-semibold text-white">Lancer une recherche</a>
 </div>
 {% endif %}
+
+{% if unplaced %}
+<section class="mt-6 rounded-2xl border border-line bg-card p-4">
+  <h2 class="font-semibold text-ink-950">Sans position ({{ unplaced|length }})</h2>
+  <p class="mt-1 text-sm text-ink-500">Adresse introuvable : complétez l'adresse sur la fiche pour les intégrer à la tournée.</p>
+  <ul class="mt-3 divide-y divide-line text-sm">
+    {% for item in unplaced %}<li class="py-2"><a href="/prospects/{{ item.id }}" class="font-semibold text-pine-700">{{ item.nom_affiche }}</a> <span class="text-ink-500">{{ item.adresse or item.ville or "sans adresse" }}</span></li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if tournees %}
+<section class="no-print mt-8">
+  <h2 class="today-title">Tournées imprimées</h2>
+  <ul class="mt-3 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-card">
+    {% for t in tournees %}
+    <li class="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+      <div>
+        <p class="font-semibold text-ink-950">Tournée n° {{ t.id }}, {{ t.jour | fr_date }}</p>
+        <p class="text-xs text-ink-500">{{ t.arrets|length }} arrêts{% if t.depart_label %}, départ : {{ t.depart_label }}{% endif %}</p>
+      </div>
+      <div class="flex gap-2 text-sm font-semibold">
+        <a href="/tournee/{{ t.id }}/impression" class="quick-action border border-line bg-white px-3">Feuille</a>
+        {% if t.saisie_at %}
+        <span class="quick-action bg-pine-50 px-3 text-pine-800">Saisie faite</span>
+        {% else %}
+        <a href="/tournee/{{ t.id }}/saisie" class="quick-action bg-ink-950 px-3 text-white">Saisir le retour</a>
+        {% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<script id="map-data" type="application/json">{{ map_data | tojson }}</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+(function () {
+  const form = document.getElementById('tournee-form');
+  const setPosition = (onDone) => {
+    const label = document.querySelector('[data-geoloc-label]');
+    if (!navigator.geolocation) { if (label) label.textContent = 'Position indisponible'; return; }
+    if (label) label.textContent = 'Recherche de la position…';
+    navigator.geolocation.getCurrentPosition((pos) => {
+      form.depart_lat.value = pos.coords.latitude.toFixed(6);
+      form.depart_lon.value = pos.coords.longitude.toFixed(6);
+      form.depart_adresse.value = '';
+      if (label) label.textContent = 'Départ : votre position ✓';
+      if (onDone) onDone();
+    }, () => { if (label) label.textContent = 'Position refusée ou introuvable'; }, { enableHighAccuracy: true, timeout: 12000 });
+  };
+  document.querySelector('[data-geoloc]')?.addEventListener('click', () => setPosition());
+  form.depart_adresse?.addEventListener('input', () => { form.depart_lat.value = ''; form.depart_lon.value = ''; });
+  document.querySelector('[data-recalcul]')?.addEventListener('click', () => setPosition(() => {
+    const now = new Date();
+    form.heure_depart.value = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    form.submit();
+  }));
+
+  const data = JSON.parse(document.getElementById('map-data').textContent);
+  const el = document.getElementById('carte');
+  if (!el || !window.L || !data.stops.length) { if (el && !data.stops.length) el.remove(); return; }
+  const map = L.map(el, { scrollWheelZoom: false });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; contributeurs OpenStreetMap',
+  }).addTo(map);
+  const colors = { chaud: '#ea580c', tiede: '#d29b2a', froid: '#6f675f', client: '#186552', refuse: '#8c3b32' };
+  const path = [];
+  if (data.start) {
+    path.push(data.start);
+    L.marker(data.start, { icon: L.divIcon({ className: '', html: '<span class="map-start">Départ</span>', iconSize: [56, 24], iconAnchor: [28, 12] }) }).addTo(map);
+  }
+  data.stops.forEach((stop) => {
+    const point = [stop.lat, stop.lon];
+    path.push(point);
+    const html = `<span class="map-pin" style="background:${colors[stop.niveau] || '#186552'}">${stop.n}</span>`;
+    L.marker(point, { icon: L.divIcon({ className: '', html, iconSize: [28, 28], iconAnchor: [14, 14] }) })
+      .addTo(map)
+      .bindPopup(`<strong>${stop.n}. ${stop.nom.replace(/[<>&]/g, '')}</strong>`);
+  });
+  if (data.retour && data.start) path.push(data.start);
+  L.polyline(path, { color: '#186552', weight: 3, opacity: 0.75, dashArray: '6 6' }).addTo(map);
+  map.fitBounds(L.latLngBounds(path), { padding: [28, 28] });
+})();
+</script>
 {% endblock %}

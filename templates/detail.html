@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "components.html" import notice, text_field, area_field, select_field, source_badge %}
+{% from "components.html" import notice, text_field, area_field, select_field, source_badge, contact_block, relance_badge, score_details %}
 
 {% block page_title %}{{ prospect.nom_affiche }} · COMPANIE FINDER{% endblock %}
 {% block eyebrow %}Fiche prospect{% endblock %}
@@ -18,6 +18,35 @@
 <div class="grid items-start gap-6 xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
   <section class="rounded-3xl border border-line bg-card p-5 shadow-card xl:sticky xl:top-28">
     <div class="flex flex-wrap items-center gap-2">
+      <span class="status-pill" data-status="{{ prospect.statut }}">{{ STATUT_LABELS.get(prospect.statut, prospect.statut) }}</span>
+      {{ relance_badge(prospect) }}
+    </div>
+    {% if prospect.prochaine_action_at %}
+    <p class="mt-3 rounded-2xl {% if prospect.relance_due %}bg-red-50 text-red-900{% else %}bg-pine-50 text-pine-800{% endif %} px-3 py-2 text-sm">
+      <span class="font-semibold">Prochaine action, {{ prospect.prochaine_action_at | fr_date }}</span>
+      {% if prospect.prochaine_action %}<br>{{ prospect.prochaine_action }}{% endif %}
+    </p>
+    {% endif %}
+
+    {{ score_details(prospect) }}
+
+    <a href="#journal" class="quick-action mt-4 w-full bg-ink-950 text-sm font-semibold text-white hover:bg-ink-900">Noter un passage ou un appel</a>
+
+    {% if prospect.contact_nom or prospect.telephone or prospect.email or prospect.instagram %}
+    <div class="mt-4 border-t border-line pt-4">
+      {% if prospect.contact_nom %}<p class="text-sm font-semibold text-ink-950">{{ prospect.contact_nom }}{% if prospect.contact_role %} <span class="font-normal text-ink-500">({{ prospect.contact_role }})</span>{% endif %}</p>{% endif %}
+      {% if prospect.telephone %}<p class="mt-1 font-mono text-[13px] text-ink-700">{{ prospect.telephone }}</p>{% endif %}
+      <div class="mt-3 grid grid-cols-2 gap-2 text-sm font-semibold">
+        {% if links.tel %}<a href="{{ links.tel }}" class="quick-action bg-pine-700 text-white">Appeler</a>{% endif %}
+        {% if links.sms %}<a href="{{ links.sms }}" class="quick-action border border-line bg-white">SMS</a>{% endif %}
+        {% if links.whatsapp %}<a href="{{ links.whatsapp }}" target="_blank" rel="noopener noreferrer" class="quick-action border border-line bg-white">WhatsApp</a>{% endif %}
+        {% if links.mail %}<a href="{{ links.mail }}" class="quick-action border border-line bg-white">Email</a>{% endif %}
+        {% if links.instagram %}<a href="{{ links.instagram }}" target="_blank" rel="noopener noreferrer" class="quick-action border border-line bg-white">Instagram</a>{% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
       {{ source_badge(prospect.source) }}
       {% if prospect.actif %}<span class="rounded-full bg-pine-50 px-2 py-0.5 text-[11px] font-semibold text-pine-800">Actif</span>{% else %}<span class="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-800">Fermé</span>{% endif %}
       {% if prospect.independant %}<span class="rounded-full bg-ink-950/5 px-2 py-0.5 text-[11px] font-semibold">Indépendant</span>{% endif %}
@@ -26,7 +55,7 @@
     {% if prospect.enseigne and prospect.enseigne != prospect.nom %}
     <p class="mt-4 text-sm text-ink-500">{{ prospect.nom }}</p>
     {% endif %}
-    <p class="mt-1 text-sm font-medium text-ink-800">{{ prospect.secteur or "Secteur non précisé" }}{% if prospect.code_naf %} · <span class="font-mono text-xs">{{ prospect.code_naf }}</span>{% endif %}</p>
+    <p class="mt-1 text-sm font-medium text-ink-800">{{ prospect.secteur or "Secteur non précisé" }}{% if prospect.code_naf %}, <span class="font-mono text-xs">{{ prospect.code_naf }}</span>{% endif %}</p>
 
     <dl class="mt-6 space-y-3 text-sm">
       <div class="flex items-start justify-between gap-3">
@@ -65,9 +94,74 @@
     </div>
   </section>
 
+  <div class="flex min-w-0 flex-col gap-6">
+    <div id="journal" class="grid items-start gap-6 2xl:grid-cols-2">
+  <form method="post" action="/prospects/{{ prospect.id }}/journal" class="rounded-3xl border border-line bg-card p-5 shadow-card">
+    <h2 class="font-display text-2xl text-ink-950">Ajouter un contact</h2>
+    <p class="mt-1 text-sm text-ink-500">Passage, appel, message : tout reste dans le journal.</p>
+    {% if journal_error %}<div class="mt-4">{{ notice('error', journal_error) }}</div>{% endif %}
+    <fieldset class="mt-4">
+      <legend class="mb-2 text-[11px] font-semibold text-ink-500">Type</legend>
+      <div class="flex flex-wrap gap-2">
+        {% for value, label in INTERACTIONS %}
+        <label class="chip"><input type="radio" name="type" value="{{ value }}" class="sr-only" {% if loop.first %}checked{% endif %}><span>{{ label }}</span></label>
+        {% endfor %}
+      </div>
+    </fieldset>
+    <div class="mt-4 grid gap-4">
+      <label class="block">
+        <span class="mb-1.5 block text-[11px] font-semibold text-ink-500">Nouveau statut</span>
+        <select name="statut" class="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm">
+          <option value="">Ne pas changer ({{ STATUT_LABELS.get(prospect.statut, prospect.statut) }})</option>
+          {% for value, label in STATUTS %}{% if value != prospect.statut %}<option value="{{ value }}">{{ label }}</option>{% endif %}{% endfor %}
+        </select>
+      </label>
+      {{ area_field('notes', 'Ce qui s’est dit', '', 'Gérante absente, repasser jeudi. Utilise un agenda papier, intéressée par les rappels SMS…', 3) }}
+      {{ text_field('occurred_at', 'Quand', now_local, '', 'datetime-local') }}
+      <div class="grid grid-cols-2 gap-2" aria-label="Relance rapide">
+        <button type="button" class="chip-btn" data-relance="1">Demain</button>
+        <button type="button" class="chip-btn" data-relance="3">Dans 3 jours</button>
+        <button type="button" class="chip-btn" data-relance="7">Dans 1 semaine</button>
+        <button type="button" class="chip-btn" data-relance="30">Dans 1 mois</button>
+      </div>
+      {{ text_field('prochaine_action_at', 'Relancer le', '', '', 'date', 'Vide = relance inchangée') }}
+      {{ text_field('prochaine_action', 'Pour faire quoi', '', 'Rappeler pour fixer la démo') }}
+      {% if prospect.prochaine_action_at %}
+      <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="effacer_relance" value="1"> Relance traitée, l’effacer</label>
+      {% endif %}
+    </div>
+    <button class="mt-5 w-full rounded-xl bg-pine-700 px-5 py-3 text-sm font-semibold text-white hover:bg-pine-800">Enregistrer le contact</button>
+  </form>
+
+  <div class="rounded-3xl border border-line bg-card p-5 shadow-card sm:p-7">
+    <h2 class="font-display text-2xl text-ink-950">Journal</h2>
+    {% if journal %}
+    <ol class="mt-5 space-y-0">
+      {% for entry in journal %}
+      <li class="timeline-item">
+        <div class="flex flex-wrap items-baseline justify-between gap-2">
+          <p class="text-sm font-semibold text-ink-950">{{ INTERACTION_LABELS.get(entry.type, entry.type) }}</p>
+          <time class="text-xs text-ink-400" datetime="{{ entry.occurred_at }}">{{ entry.occurred_at | fr_datetime }}</time>
+        </div>
+        {% if entry.statut_apres %}
+        <p class="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-ink-500">
+          {% if entry.statut_avant %}<span class="status-pill" data-status="{{ entry.statut_avant }}">{{ STATUT_LABELS.get(entry.statut_avant, entry.statut_avant) }}</span> →{% endif %}
+          <span class="status-pill" data-status="{{ entry.statut_apres }}">{{ STATUT_LABELS.get(entry.statut_apres, entry.statut_apres) }}</span>
+        </p>
+        {% endif %}
+        {% if entry.notes %}<p class="mt-1.5 whitespace-pre-line text-sm leading-6 text-ink-800">{{ entry.notes }}</p>{% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}
+    <p class="mt-4 rounded-2xl border border-dashed border-line px-4 py-8 text-center text-sm text-ink-500">Aucun contact pour l’instant. Le premier passage ou appel apparaîtra ici.</p>
+    {% endif %}
+  </div>
+    </div>
+
   <form method="post" action="/prospects/{{ prospect.id }}" class="rounded-3xl border border-line bg-card p-5 shadow-card sm:p-7">
-    <h2 class="font-display text-2xl text-ink-950">Qualification</h2>
-    <p class="mt-1 text-sm text-ink-500">Notes de terrain, présence en ligne, outil déjà en place.</p>
+    <h2 class="font-display text-2xl text-ink-950">Fiche du salon</h2>
+    <p class="mt-1 text-sm text-ink-500">Statut, contact, relance, site web et outil de réservation.</p>
 
     <div class="mt-6 grid gap-4 sm:grid-cols-2">
       {{ text_field('marque', 'Enseigne sur place', values.marque, 'Nom lu sur la vitrine') }}
@@ -76,6 +170,11 @@
       {{ select_field('site_presence', 'Site web', SITE_PRESENCE, values.site_presence) }}
       {{ text_field('site_web', 'URL du site', values.site_web, 'https://…', 'text') }}
       {{ select_field('outil_reservation', 'Réservation en ligne', OUTILS, values.outil_reservation) }}
+    </div>
+
+    <div class="mt-8 border-t border-line pt-6">
+      <h3 class="mb-4 text-sm font-semibold">Contact et relance</h3>
+      {{ contact_block(values) }}
     </div>
 
     {% if not prospect.officiel %}
@@ -89,7 +188,7 @@
         {{ text_field('libelle_voie', 'Rue', values.libelle_voie, 'Rue de la Paix', 'text', 'Sert à trier la tournée') }}
         {{ text_field('code_postal', 'Code postal', values.code_postal, '59100') }}
         {{ text_field('ville', 'Ville', values.ville, 'Roubaix') }}
-        {{ text_field('dirigeant', 'Contact', values.dirigeant, 'Prénom Nom') }}
+        {{ text_field('dirigeant', 'Dirigeant', values.dirigeant, 'Prénom Nom') }}
         {{ text_field('date_creation', 'Date d’ouverture', values.date_creation, '', 'date') }}
         {{ select_field('source', 'Source', SOURCES, values.source) }}
         {{ select_field('metier', 'Métier', METIERS, values.metier) }}
@@ -104,8 +203,8 @@
 
     <div class="mt-6 grid gap-4">
       {{ area_field('notes_terrain', 'Notes de terrain', values.notes_terrain, 'Sonnette au fond de la cour, 4 postes, gérant présent le mardi matin…') }}
-      {{ area_field('notes_maps', 'Notes Google Maps', values.notes_maps, '4,6/5 · 128 avis · fermé le lundi · vitrine récente') }}
-      {{ area_field('notes_reseaux', 'Notes Instagram', values.notes_reseaux, '@atelier.nord · lien de réservation en bio · story il y a 2 jours') }}
+      {{ area_field('notes_maps', 'Notes Google Maps', values.notes_maps, '4,6/5, 128 avis, fermé le lundi, vitrine récente') }}
+      {{ area_field('notes_reseaux', 'Notes Instagram', values.notes_reseaux, '@atelier.nord, lien de réservation en bio, story il y a 2 jours') }}
     </div>
 
     <div class="mt-6 flex flex-wrap items-center justify-between gap-3">
@@ -117,12 +216,23 @@
       {% endif %}
     </div>
   </form>
+  </div>
 </div>
 
 <form method="post" action="/prospects/{{ prospect.id }}/supprimer" class="no-print mt-4" onsubmit="return confirm('Retirer ce prospect du tableau ?')">
   <button class="text-sm font-semibold text-red-800/80 hover:text-red-800">Retirer du tableau</button>
 </form>
 <script>
+  document.querySelectorAll('[data-relance]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const day = new Date();
+      day.setDate(day.getDate() + Number(button.dataset.relance));
+      const iso = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+      const input = button.closest('form').querySelector('[name=prochaine_action_at]');
+      input.value = iso;
+      input.dispatchEvent(new Event('change'));
+    });
+  });
   document.querySelector('[name=site_web]')?.addEventListener('input', (event) => {
     if (event.target.value.trim()) {
       const presence = document.querySelector('[name=site_presence]');

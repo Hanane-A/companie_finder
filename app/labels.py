@@ -3,9 +3,28 @@ from __future__ import annotations
 STATUTS = (
     ("a_contacter", "À contacter"),
     ("contacte", "Contacté"),
+    ("visite", "Passage fait"),
+    ("interesse", "Intéressé"),
     ("rdv", "Rendez-vous pris"),
+    ("demo", "Démo faite"),
+    ("essai", "Essai en cours"),
     ("client", "Client"),
+    ("plus_tard", "Plus tard"),
     ("refuse", "Refusé"),
+)
+
+# Statuts qui sortent un prospect des relances et des tournées.
+STATUTS_CLOS = ("client", "refuse")
+
+INTERACTIONS = (
+    ("passage", "Passage en salon"),
+    ("appel", "Appel"),
+    ("sms", "SMS / WhatsApp"),
+    ("dm", "Message Instagram"),
+    ("email", "Email"),
+    ("rdv", "Rendez-vous"),
+    ("demo", "Démonstration"),
+    ("note", "Note"),
 )
 
 SOURCES = (
@@ -101,6 +120,9 @@ EFFECTIFS = {
 }
 
 STATUT_LABELS = dict(STATUTS)
+INTERACTION_LABELS = dict(INTERACTIONS)
+INTERACTION_LABELS["statut"] = "Changement de statut"
+INTERACTION_IDS = {value for value, _label in INTERACTIONS}
 SOURCE_LABELS = dict(SOURCES)
 OUTIL_LABELS = dict(OUTILS)
 SITE_LABELS = dict(SITE_PRESENCE)

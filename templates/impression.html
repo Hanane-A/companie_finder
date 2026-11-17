@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tournée du {{ jour_label }} · COMPANIE FINDER</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <style>
+    @page { size: A4; margin: 12mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #eceae6; color: #141210; font: 11pt/1.35 "Segoe UI", Arial, sans-serif; }
+    .page { width: 210mm; min-height: 297mm; margin: 12px auto; padding: 12mm; background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,.12); }
+    .toolbar { position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; padding: 10px; background: #141210; }
+    .toolbar a, .toolbar button { border: 0; border-radius: 10px; padding: 9px 14px; font: 600 14px/1 "Segoe UI", Arial, sans-serif; text-decoration: none; cursor: pointer; }
+    .toolbar .primary { background: #186552; color: #fff; }
+    .toolbar .secondary { background: #fff; color: #141210; }
+    h1 { margin: 0; font-size: 20pt; }
+    .sub { margin: 2px 0 10px; color: #555; font-size: 10pt; }
+    #carte { height: 85mm; margin: 6px 0 10px; border: 1px solid #ccc; border-radius: 6px; }
+    table.liste { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+    table.liste th { border-bottom: 1.5px solid #141210; padding: 4px; text-align: left; font-size: 8pt; text-transform: uppercase; letter-spacing: .06em; }
+    table.liste td { border-bottom: 1px solid #ddd; padding: 5px 4px; vertical-align: top; }
+    .num { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #141210; color: #fff; font-weight: 700; font-size: 9pt; }
+    .fiches { display: block; }
+    .fiche { margin-bottom: 3mm; border: 1.5px solid #141210; border-radius: 6px; padding: 2.5mm 3.5mm; break-inside: avoid; page-break-inside: avoid; }
+    .fiche-head { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+    .fiche-head h2 { margin: 0; font-size: 11.5pt; }
+    .fiche-head .meta { margin: 1px 0 0; }
+    .meta { color: #444; font-size: 9pt; }
+    .tag { display: inline-block; border: 1px solid #999; border-radius: 99px; padding: 0 6px; font-size: 8pt; margin-right: 3px; }
+    .cases { display: flex; flex-wrap: wrap; gap: 2px 11px; margin: 2px 0 3px; font-size: 9pt; }
+    .cases span::before { content: ""; display: inline-block; width: 11px; height: 11px; margin-right: 4px; border: 1.3px solid #141210; vertical-align: -1px; }
+    .label { font-size: 7pt; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #555; margin-top: 2px; }
+    .lignes { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+    .ligne { border-bottom: 1px solid #999; height: 6.5mm; font-size: 8pt; color: #777; padding-top: 1px; }
+    .notes .ligne { grid-column: span 2; }
+    .connu { font-size: 9pt; color: #141210; }
+    .break { break-before: page; page-break-before: always; }
+    @media print {
+      body { background: #fff; }
+      .toolbar { display: none; }
+      .page { width: auto; min-height: 0; margin: 0; padding: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button type="button" class="primary" onclick="window.print()">Imprimer</button>
+    <a class="secondary" href="/tournee/{{ tournee.id }}/saisie">Saisir le retour</a>
+    <a class="secondary" href="/tournee">Retour à la tournée</a>
+  </div>
+
+  <div class="page">
+    <h1>Tournée du {{ jour_label }}</h1>
+    <p class="sub">{{ stops|length }} arrêts · {{ mode_label }}{% if tournee.depart_label %} · départ : {{ tournee.depart_label }}{% endif %} · tournée n° {{ tournee.id }}</p>
+    <div id="carte"></div>
+    <table class="liste">
+      <thead><tr><th>N°</th><th>Heure</th><th>Salon</th><th>Adresse</th><th>Téléphone</th><th>Score</th></tr></thead>
+      <tbody>
+        {% for s in stops %}
+        <tr>
+          <td><span class="num">{{ s.numero }}</span></td>
+          <td>{{ s.heure }}</td>
+          <td><strong>{{ s.nom_affiche }}</strong>{% if s.prochaine_action %}<br><span class="meta">{{ s.prochaine_action }}</span>{% endif %}</td>
+          <td>{{ s.adresse or s.ville }}</td>
+          <td>{{ s.telephone or "" }}</td>
+          <td>{% if s.niveau in ('chaud', 'tiede', 'froid') %}{{ s.score }}{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="page break">
+    <div class="fiches">
+      {% for s in stops %}
+      <section class="fiche">
+        <div class="fiche-head">
+          <div>
+            <h2><span class="num">{{ s.numero }}</span> {{ s.nom_affiche }}</h2>
+            <p class="meta">{{ s.heure }} · {{ s.adresse or s.ville }}</p>
+          </div>
+          <div class="meta" style="text-align:right">
+            {% if s.niveau in ('chaud', 'tiede', 'froid') %}<span class="tag">Score {{ s.score }}</span>{% endif %}
+            <span class="tag">{{ STATUT_LABELS.get(s.statut, s.statut) }}</span>
+          </div>
+        </div>
+        {% if s.prochaine_action or s.notes_terrain %}
+        <p class="meta" style="margin:3px 0 0">{% if s.prochaine_action %}À faire : {{ s.prochaine_action }}. {% endif %}{{ s.notes_terrain|truncate(160) }}</p>
+        {% endif %}
+
+        <div class="label">Résultat</div>
+        <div class="cases">
+          <span>Décideur absent</span><span>Intéressé</span><span>RDV pris le ____ à ___h___</span><span>Plus tard</span><span>Pas intéressé</span><span>Fermé / introuvable</span>
+        </div>
+
+        <div class="label">Outil de réservation</div>
+        <div class="cases">
+          {% for value in outils_terrain %}<span>{{ OUTIL_LABELS.get(value, value) }}</span>{% endfor %}
+          {% if s.outil_reservation %}<em class="meta">(noté : {{ OUTIL_LABELS.get(s.outil_reservation) }})</em>{% endif %}
+        </div>
+
+        <div class="label">Contact</div>
+        <div class="lignes">
+          <div class="ligne">Nom / rôle {% if s.contact_nom %}<span class="connu">: {{ s.contact_nom }}</span>{% endif %}</div>
+          <div class="ligne">Téléphone {% if s.telephone %}<span class="connu">: {{ s.telephone }}</span>{% endif %}</div>
+          <div class="ligne">Email {% if s.email %}<span class="connu">: {{ s.email }}</span>{% endif %}</div>
+          <div class="ligne">Instagram {% if s.instagram %}<span class="connu">: @{{ s.instagram }}</span>{% endif %}</div>
+        </div>
+        <div class="label">Notes (heure de passage, nb de postes, objections…)</div>
+        <div class="lignes notes"><div class="ligne"></div><div class="ligne"></div></div>
+      </section>
+      {% endfor %}
+    </div>
+  </div>
+
+  <script id="map-data" type="application/json">{{ map_data | tojson }}</script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script>
+  (function () {
+    const data = JSON.parse(document.getElementById('map-data').textContent);
+    const el = document.getElementById('carte');
+    if (!window.L || !data.stops.length) { el.remove(); return; }
+    const map = L.map(el, { zoomControl: false, attributionControl: true });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+    const path = data.stops.map((s) => [s.lat, s.lon]);
+    data.stops.forEach((s) => {
+      L.marker([s.lat, s.lon], { icon: L.divIcon({ className: '', html: `<span class="num" style="border:2px solid #fff">${s.n}</span>`, iconSize: [24, 24], iconAnchor: [12, 12] }) }).addTo(map);
+    });
+    L.polyline(path, { color: '#141210', weight: 2, dashArray: '5 5' }).addTo(map);
+    map.fitBounds(L.latLngBounds(path), { padding: [20, 20] });
+  })();
+  </script>
+</body>
+</html>

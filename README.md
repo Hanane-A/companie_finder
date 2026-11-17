@@ -16,6 +16,40 @@ COMPANIE FINDER interroge le fichier public SIRENE, puis garde vos prospects, vo
 - Tournée groupée par rue, prête à imprimer.
 - Export CSV de la sélection, ouvrable dans Excel (séparateur `;`, UTF-8 avec BOM).
 
+## Prospection terrain
+
+- **Aujourd'hui** : relances en retard et du jour, rendez-vous à venir, prospects intéressés sans relance, contacts faits dans la journée.
+- **Fiche prospect** : contact, téléphone, email, Instagram, boutons Appeler / SMS / WhatsApp, journal des passages et appels (en ajout seul), prochaine action.
+- **Score HANUP Desk** : note sur 100 (chaud, tiède, froid) expliquée point par point. Barème dans `app/scoring.py`.
+- **Tournée optimisée** : ordre de passage calculé (plus proche voisin puis 2-opt), départ depuis votre position ou une adresse, à pied, en transports, à vélo ou en voiture, heures d'arrivée estimées, carte, liens Google Maps, résultat du passage en un clic.
+
+### Temps de trajet réels (facultatif)
+
+Sans configuration, les temps sont estimés d'après la distance. Pour des temps réels à pied, à vélo et en voiture, créez une clé gratuite sur [openrouteservice.org](https://openrouteservice.org) puis, avant de lancer l'outil :
+
+```powershell
+$env:ORS_API_KEY = "votre-cle"
+.venv\Scripts\python run.py
+```
+
+En transports en commun, l'ordre est estimé et chaque trajet s'ouvre dans Google Maps.
+
+## Styles
+
+Les styles sont compilés dans `static/app.css` (déjà fourni). Si vous modifiez des classes dans les gabarits, recompilez :
+
+```powershell
+npm install
+npm run build:css
+```
+
+## Tests
+
+```powershell
+.venv\Scripts\python -m pip install -r requirements-dev.txt
+.venv\Scripts\python -m pytest
+```
+
 ## Prérequis
 
 - Python 3.11 ou plus récent
@@ -80,7 +114,11 @@ run.py                 Lancement
 app/main.py            Pages et actions
 app/sirene.py          Client API Recherche d'entreprises
 app/geo.py             Ville, code postal, quartier
-app/db.py              Base SQLite
+app/db.py              Base SQLite, migrations, journal
+app/scoring.py         Score HANUP Desk
+app/routing.py         Optimisation de tournée
+app/ors.py             Temps de trajet OpenRouteService (facultatif)
+tests/                 Tests automatiques
 app/exporting.py       Export CSV
 app/labels.py          Secteurs, statuts, sources
 templates/             Interface

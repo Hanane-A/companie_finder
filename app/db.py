@@ -1,19 +1,44 @@
 from __future__ import annotations
 
 import json
+import shutil
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Iterator
 
+from app import scoring
 from app.labels import NAF_IDS, SANS_RUE, STATUTS
 from app.text import fold, fold_key, rue_label, street_number
 
 ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = ROOT / "data" / "companie.db"
 
-OFFICIAL_FIELDS = {
+CONTACT_FIELDS = {
+    "contact_nom",
+    "contact_role",
+    "telephone",
+    "email",
+    "instagram",
+    "prochaine_action",
+    "prochaine_action_at",
+}
+
+# Colonnes ajoutées après la première version : la migration les crée
+# sur une base existante sans perdre les fiches déjà saisies.
+NEW_COLUMNS = (
+    ("contact_nom", "TEXT NOT NULL DEFAULT ''"),
+    ("contact_role", "TEXT NOT NULL DEFAULT ''"),
+    ("telephone", "TEXT NOT NULL DEFAULT ''"),
+    ("email", "TEXT NOT NULL DEFAULT ''"),
+    ("instagram", "TEXT NOT NULL DEFAULT ''"),
+    ("prochaine_action", "TEXT NOT NULL DEFAULT ''"),
+    ("prochaine_action_at", "TEXT NOT NULL DEFAULT ''"),
+    ("dernier_contact_at", "TEXT NOT NULL DEFAULT ''"),
+)
+
+OFFICIAL_FIELDS = CONTACT_FIELDS | {
     "enseigne",
     "quartier",
     "statut",
@@ -52,6 +77,7 @@ def now() -> str:
 
 def init_db() -> None:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    backup_before_migration()
     with session() as conn:
         conn.executescript(
             """
@@ -101,8 +127,61 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_prospects_siret ON prospects(siret);
             CREATE INDEX IF NOT EXISTS idx_prospects_statut ON prospects(statut);
             CREATE INDEX IF NOT EXISTS idx_prospects_cp ON prospects(code_postal);
+
+            CREATE TABLE IF NOT EXISTS interactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                prospect_id INTEGER NOT NULL REFERENCES prospects(id) ON DELETE CASCADE,
+                type TEXT NOT NULL,
+                notes TEXT NOT NULL DEFAULT '',
+                statut_avant TEXT NOT NULL DEFAULT '',
+                statut_apres TEXT NOT NULL DEFAULT '',
+                occurred_at TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_interactions_prospect
+                ON interactions(prospect_id, occurred_at);
+
+            CREATE TABLE IF NOT EXISTS tournees (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                jour TEXT NOT NULL,
+                mode TEXT NOT NULL,
+                depart_label TEXT NOT NULL DEFAULT '',
+                arrets TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                saisie_at TEXT NOT NULL DEFAULT ''
+            );
             """
         )
+        migrate(conn)
+
+
+def backup_before_migration() -> None:
+    """Copie la base avant d'y ajouter des colonnes, une seule fois."""
+    if not DB_PATH.exists():
+        return
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        if "prospects" not in tables:
+            return
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(prospects)")}
+    finally:
+        conn.close()
+    if all(name in columns for name, _definition in NEW_COLUMNS):
+        return
+    target = DB_PATH.with_name(f"{DB_PATH.stem}.avant-migration-{datetime.now():%Y%m%d-%H%M%S}.db")
+    shutil.copy2(DB_PATH, target)
+
+
+def migrate(conn: sqlite3.Connection) -> None:
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(prospects)")}
+    for name, definition in NEW_COLUMNS:
+        if name not in existing:
+            conn.execute(f"ALTER TABLE prospects ADD COLUMN {name} {definition}")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_prospects_relance ON prospects(prochaine_action_at)"
+    )
 
 
 @contextmanager
@@ -110,6 +189,7 @@ def session() -> Iterator[sqlite3.Connection]:
     conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
     try:
         yield conn
         conn.commit()
@@ -142,9 +222,24 @@ def enrich(row: sqlite3.Row | dict) -> dict:
             "type_voie",
             "quartier",
             "dirigeant",
+            "contact_nom",
+            "telephone",
+            "email",
+            "instagram",
         )
     )
+    echeance = item.get("prochaine_action_at") or ""
+    item["relance_due"] = bool(echeance) and echeance <= today()
+    if "statut" in item:
+        resultat = scoring.compute(item)
+        item["score"] = resultat["score"]
+        item["niveau"] = resultat["niveau"]
+        item["raisons"] = resultat["raisons"]
     return item
+
+
+def today() -> str:
+    return date.today().isoformat()
 
 
 def count_all() -> int:
@@ -335,6 +430,7 @@ def create_manual(values: dict) -> int:
         "notes_terrain": values.get("notes_terrain") or "",
         "notes_maps": values.get("notes_maps") or "",
         "notes_reseaux": values.get("notes_reseaux") or "",
+        **{key: values.get(key) or "" for key in CONTACT_FIELDS},
         "created_at": timestamp,
         "updated_at": timestamp,
     }
@@ -347,14 +443,18 @@ def create_manual(values: dict) -> int:
                 latitude, longitude, date_creation, date_creation_unite, actif,
                 effectif, dirigeant, independant, coworking, officiel, source,
                 statut, site_presence, site_web, outil_reservation,
-                notes_terrain, notes_maps, notes_reseaux, created_at, updated_at
+                notes_terrain, notes_maps, notes_reseaux,
+                contact_nom, contact_role, telephone, email, instagram,
+                prochaine_action, prochaine_action_at, created_at, updated_at
             ) VALUES (
                 :siret, :siren, :nom, :enseigne, :secteur, :code_naf, :adresse,
                 :numero_voie, :type_voie, :libelle_voie, :code_postal, :ville, :quartier,
                 :latitude, :longitude, :date_creation, :date_creation_unite, :actif,
                 :effectif, :dirigeant, :independant, :coworking, 0, :source,
                 :statut, :site_presence, :site_web, :outil_reservation,
-                :notes_terrain, :notes_maps, :notes_reseaux, :created_at, :updated_at
+                :notes_terrain, :notes_maps, :notes_reseaux,
+                :contact_nom, :contact_role, :telephone, :email, :instagram,
+                :prochaine_action, :prochaine_action_at, :created_at, :updated_at
             )
             """,
             payload,
@@ -367,27 +467,107 @@ def update_prospect(prospect_id: int, values: dict, *, official: bool) -> None:
     clean = {key: values[key] for key in values if key in allowed}
     if not clean:
         return
-    clean["updated_at"] = now()
+    timestamp = now()
+    clean["updated_at"] = timestamp
     clean["id"] = prospect_id
     assignments = ", ".join(f"{key} = :{key}" for key in clean if key != "id")
     with session() as conn:
+        row = conn.execute("SELECT statut FROM prospects WHERE id = ?", (prospect_id,)).fetchone()
+        if row is None:
+            return
         conn.execute(
             f"UPDATE prospects SET {assignments} WHERE id = :id",
             clean,
         )
+        new_statut = clean.get("statut")
+        if new_statut and new_statut != row["statut"]:
+            _log_statut(conn, prospect_id, row["statut"], new_statut, timestamp)
 
 
 def set_statut(prospect_id: int, statut: str) -> bool:
+    timestamp = now()
     with session() as conn:
-        cursor = conn.execute(
+        row = conn.execute("SELECT statut FROM prospects WHERE id = ?", (prospect_id,)).fetchone()
+        if row is None:
+            return False
+        if row["statut"] == statut:
+            return True
+        conn.execute(
             "UPDATE prospects SET statut = ?, updated_at = ? WHERE id = ?",
-            (statut, now(), prospect_id),
+            (statut, timestamp, prospect_id),
         )
-        return cursor.rowcount > 0
+        _log_statut(conn, prospect_id, row["statut"], statut, timestamp)
+        return True
+
+
+def _log_statut(conn: sqlite3.Connection, prospect_id: int, avant: str, apres: str, timestamp: str) -> None:
+    conn.execute(
+        """
+        INSERT INTO interactions (prospect_id, type, notes, statut_avant, statut_apres, occurred_at, created_at)
+        VALUES (?, 'statut', '', ?, ?, ?, ?)
+        """,
+        (prospect_id, avant, apres, timestamp, timestamp),
+    )
+
+
+def add_interaction(
+    prospect_id: int,
+    *,
+    kind: str,
+    notes: str,
+    occurred_at: str,
+    statut: str = "",
+    prochaine_action: str | None = None,
+    prochaine_action_at: str | None = None,
+) -> bool:
+    """Enregistre un contact et met à jour la fiche dans la même transaction.
+
+    Le journal est en ajout seul : une interaction n'est jamais modifiée.
+    """
+    timestamp = now()
+    with session() as conn:
+        row = conn.execute("SELECT statut FROM prospects WHERE id = ?", (prospect_id,)).fetchone()
+        if row is None:
+            return False
+        avant = row["statut"]
+        apres = statut if statut and statut != avant else ""
+        conn.execute(
+            """
+            INSERT INTO interactions (prospect_id, type, notes, statut_avant, statut_apres, occurred_at, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (prospect_id, kind, notes, avant if apres else "", apres, occurred_at, timestamp),
+        )
+        updates = {"updated_at": timestamp, "id": prospect_id}
+        # Un rendez-vous noté à l'avance n'est pas encore un contact réalisé.
+        if kind != "note" and occurred_at <= timestamp:
+            updates["dernier_contact_at"] = occurred_at
+        if apres:
+            updates["statut"] = apres
+        if prochaine_action_at is not None:
+            updates["prochaine_action_at"] = prochaine_action_at
+            updates["prochaine_action"] = prochaine_action or ""
+        assignments = ", ".join(f"{key} = :{key}" for key in updates if key != "id")
+        conn.execute(f"UPDATE prospects SET {assignments} WHERE id = :id", updates)
+        return True
+
+
+def list_interactions(prospect_id: int) -> list[dict]:
+    with session() as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM interactions
+            WHERE prospect_id = ?
+            ORDER BY occurred_at DESC, id DESC
+            """,
+            (prospect_id,),
+        ).fetchall()
+    return [dict(row) for row in rows]
 
 
 def delete_prospect(prospect_id: int) -> bool:
     with session() as conn:
+        conn.execute("DELETE FROM interactions WHERE prospect_id = ?", (prospect_id,))
         cursor = conn.execute("DELETE FROM prospects WHERE id = ?", (prospect_id,))
         return cursor.rowcount > 0
 
@@ -421,3 +601,196 @@ def group_by_street(items: list[dict]) -> list[dict]:
         ordered.append({"rue": label, "stops": rows})
     ordered.sort(key=lambda group: (group["rue"] == SANS_RUE, fold(group["rue"])))
     return ordered
+
+
+# --- Page « Aujourd'hui » -------------------------------------------------
+
+STATUTS_CHAUDS = ("interesse", "rdv", "demo", "essai")
+
+
+def _rows(sql: str, params: tuple = ()) -> list[dict]:
+    with session() as conn:
+        return [enrich(row) for row in conn.execute(sql, params).fetchall()]
+
+
+def relances(jusqu_au: str) -> list[dict]:
+    """Prospects avec une relance prévue jusqu'à la date donnée, la plus ancienne d'abord."""
+    return _rows(
+        """
+        SELECT * FROM prospects
+        WHERE prochaine_action_at != '' AND prochaine_action_at <= ?
+          AND statut NOT IN ('client', 'refuse')
+        ORDER BY prochaine_action_at, id
+        """,
+        (jusqu_au,),
+    )
+
+
+def count_due() -> int:
+    with session() as conn:
+        return int(
+            conn.execute(
+                """
+                SELECT COUNT(*) FROM prospects
+                WHERE prochaine_action_at != '' AND prochaine_action_at <= ?
+                  AND statut NOT IN ('client', 'refuse')
+                """,
+                (today(),),
+            ).fetchone()[0]
+        )
+
+
+def chauds_sans_relance() -> list[dict]:
+    """Prospects intéressés que rien ne fera rappeler : le risque d'oubli."""
+    marks = ", ".join("?" for _ in STATUTS_CHAUDS)
+    return _rows(
+        f"""
+        SELECT * FROM prospects
+        WHERE statut IN ({marks}) AND prochaine_action_at = ''
+          AND NOT EXISTS (
+              SELECT 1 FROM interactions i
+              WHERE i.prospect_id = prospects.id
+                AND i.type IN ('rdv', 'demo') AND i.occurred_at > ?
+          )
+        ORDER BY updated_at
+        """,
+        (*STATUTS_CHAUDS, now()),
+    )
+
+
+def rendez_vous(depuis: str, jusqu_au: str) -> list[dict]:
+    """Rendez-vous et démos notés dans le journal avec une date à venir."""
+    with session() as conn:
+        rows = conn.execute(
+            """
+            SELECT i.id AS interaction_id, i.type, i.notes, i.occurred_at, p.*
+            FROM interactions i
+            JOIN prospects p ON p.id = i.prospect_id
+            WHERE i.type IN ('rdv', 'demo') AND i.occurred_at >= ? AND i.occurred_at < ?
+            ORDER BY i.occurred_at
+            """,
+            (depuis, jusqu_au),
+        ).fetchall()
+    items = []
+    for row in rows:
+        item = enrich(row)
+        item["rdv_type"] = row["type"]
+        item["rdv_notes"] = row["notes"]
+        item["rdv_at"] = row["occurred_at"]
+        items.append(item)
+    return items
+
+
+def activite(jour: str) -> dict[str, int]:
+    """Contacts réalisés ce jour-là, par type (hors notes et changements de statut)."""
+    with session() as conn:
+        rows = conn.execute(
+            """
+            SELECT type, COUNT(*) AS total FROM interactions
+            WHERE substr(occurred_at, 1, 10) = ? AND occurred_at <= ?
+              AND type NOT IN ('note', 'statut')
+            GROUP BY type
+            """,
+            (jour, now()),
+        ).fetchall()
+    counts = {row["type"]: int(row["total"]) for row in rows}
+    counts["total"] = sum(counts.values())
+    return counts
+
+
+def set_coords(prospect_id: int, lat: float, lon: float) -> None:
+    with session() as conn:
+        conn.execute(
+            "UPDATE prospects SET latitude = ?, longitude = ? WHERE id = ?",
+            (f"{lat:.7f}", f"{lon:.7f}", prospect_id),
+        )
+
+
+def passages_du_jour(jour: str) -> set[int]:
+    """Prospects déjà visités ce jour-là (passage noté dans le journal)."""
+    with session() as conn:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT prospect_id FROM interactions
+            WHERE type = 'passage' AND substr(occurred_at, 1, 10) = ?
+            """,
+            (jour,),
+        ).fetchall()
+    return {int(row["prospect_id"]) for row in rows}
+
+
+# --- Tournées imprimées ---------------------------------------------------
+
+
+def create_tournee(jour: str, mode: str, depart_label: str, arrets: list[dict]) -> int:
+    """Enregistre l'ordre imprimé : [{"id": 12, "heure": "09:45"}, …]."""
+    with session() as conn:
+        cursor = conn.execute(
+            "INSERT INTO tournees (jour, mode, depart_label, arrets, created_at) VALUES (?, ?, ?, ?, ?)",
+            (jour, mode, depart_label, json.dumps(arrets), now()),
+        )
+        return int(cursor.lastrowid)
+
+
+def get_tournee(tournee_id: int) -> dict | None:
+    with session() as conn:
+        row = conn.execute("SELECT * FROM tournees WHERE id = ?", (tournee_id,)).fetchone()
+    if row is None:
+        return None
+    item = dict(row)
+    item["arrets"] = json.loads(item["arrets"])
+    return item
+
+
+def list_tournees(limit: int = 8) -> list[dict]:
+    with session() as conn:
+        rows = conn.execute(
+            "SELECT * FROM tournees ORDER BY created_at DESC, id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    items = []
+    for row in rows:
+        item = dict(row)
+        item["arrets"] = json.loads(item["arrets"])
+        items.append(item)
+    return items
+
+
+def tournees_a_saisir() -> list[dict]:
+    with session() as conn:
+        rows = conn.execute(
+            "SELECT * FROM tournees WHERE saisie_at = '' AND jour <= ? ORDER BY jour, id",
+            (today(),),
+        ).fetchall()
+    items = []
+    for row in rows:
+        item = dict(row)
+        item["arrets"] = json.loads(item["arrets"])
+        items.append(item)
+    return items
+
+
+def mark_tournee_saisie(tournee_id: int) -> None:
+    with session() as conn:
+        conn.execute("UPDATE tournees SET saisie_at = ? WHERE id = ?", (now(), tournee_id))
+
+
+def mark_ferme(prospect_id: int) -> None:
+    """Constat de terrain : salon fermé ou introuvable."""
+    with session() as conn:
+        conn.execute(
+            "UPDATE prospects SET actif = 0, prochaine_action = '', prochaine_action_at = '', updated_at = ? WHERE id = ?",
+            (now(), prospect_id),
+        )
+
+
+def reporter_relance(prospect_id: int, nouvelle_date: str) -> bool:
+    with session() as conn:
+        cursor = conn.execute(
+            """
+            UPDATE prospects SET prochaine_action_at = ?, updated_at = ?
+            WHERE id = ? AND prochaine_action_at != ''
+            """,
+            (nouvelle_date, now(), prospect_id),
+        )
+        return cursor.rowcount > 0

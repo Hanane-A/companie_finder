@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from datetime import datetime
 
 STREET_PARTICLES = {
     "de",
@@ -188,3 +189,58 @@ def csv_safe(value: object) -> str:
     if text[:1] in {"=", "+", "-", "@"}:
         return "'" + text
     return text
+
+
+def clean_phone(value: str | None) -> tuple[str, str]:
+    """Normalise un numéro français. Retourne (numéro, erreur)."""
+    raw = (value or "").strip()
+    if not raw:
+        return "", ""
+    digits = re.sub(r"[^\d+]", "", raw)
+    if digits.startswith("+33"):
+        digits = "0" + digits[3:]
+    elif digits.startswith("0033"):
+        digits = "0" + digits[4:]
+    if digits.startswith("+"):
+        # Numéro étranger : on le garde tel quel, sans espaces superflus.
+        if 8 <= len(digits) <= 16 and digits[1:].isdigit():
+            return digits, ""
+        return "", "Le numéro de téléphone n'est pas valide."
+    if not re.fullmatch(r"0[1-9]\d{8}", digits):
+        return "", "Le numéro doit contenir 10 chiffres, par exemple 06 12 34 56 78."
+    return " ".join(digits[i : i + 2] for i in range(0, 10, 2)), ""
+
+
+def phone_international(value: str | None) -> str:
+    digits = re.sub(r"[^\d+]", "", value or "")
+    if digits.startswith("0") and len(digits) == 10:
+        return "33" + digits[1:]
+    return digits.lstrip("+")
+
+
+def clean_email(value: str | None) -> tuple[str, str]:
+    email = (value or "").strip().lower()
+    if not email:
+        return "", ""
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[a-z]{2,}", email):
+        return "", "L'adresse email n'est pas valide."
+    return email, ""
+
+
+def clean_instagram(value: str | None) -> str:
+    handle = (value or "").strip()
+    match = re.search(r"instagram\.com/([A-Za-z0-9._]+)", handle)
+    if match:
+        handle = match.group(1)
+    handle = handle.lstrip("@").strip("/ ")
+    return handle if re.fullmatch(r"[A-Za-z0-9._]{1,30}", handle) else ""
+
+
+def fr_datetime(value: str | None) -> str:
+    if not value:
+        return ""
+    try:
+        moment = datetime.fromisoformat(value)
+    except ValueError:
+        return value
+    return f"{moment:%d/%m/%Y à %H:%M}"
