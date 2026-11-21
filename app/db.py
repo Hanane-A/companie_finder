@@ -228,6 +228,9 @@ def enrich(row: sqlite3.Row | dict) -> dict:
             "instagram",
         )
     )
+    if item.get("telephone"):
+        # Retrouver un numéro tapé sans espaces.
+        item["blob"] += " " + str(item["telephone"]).replace(" ", "")
     echeance = item.get("prochaine_action_at") or ""
     item["relance_due"] = bool(echeance) and echeance <= today()
     if "statut" in item:
@@ -370,11 +373,13 @@ def upsert_imported(items: list[dict]) -> tuple[int, int]:
                     libelle_voie = :libelle_voie,
                     code_postal = :code_postal,
                     ville = :ville,
-                    latitude = :latitude,
-                    longitude = :longitude,
+                    -- Une position déjà calculée n'est pas effacée par un import sans coordonnées.
+                    latitude = CASE WHEN :latitude IS NULL OR :latitude = '' THEN latitude ELSE :latitude END,
+                    longitude = CASE WHEN :longitude IS NULL OR :longitude = '' THEN longitude ELSE :longitude END,
                     date_creation = :date_creation,
                     date_creation_unite = :date_creation_unite,
-                    actif = :actif,
+                    -- Une fermeture constatée sur le terrain reste, même si SIRENE n'est pas à jour.
+                    actif = CASE WHEN :actif = 0 THEN 0 ELSE actif END,
                     effectif = :effectif,
                     dirigeant = :dirigeant,
                     independant = CASE WHEN independant = 1 OR :independant = 1 THEN 1 ELSE 0 END,
@@ -717,6 +722,22 @@ def passages_du_jour(jour: str) -> set[int]:
             (jour,),
         ).fetchall()
     return {int(row["prospect_id"]) for row in rows}
+
+
+# --- Statistiques -------------------------------------------------------
+
+
+def donnees_stats() -> tuple[list[dict], list[dict]]:
+    """Fiches et journal, réduits à ce que les statistiques utilisent."""
+    with session() as conn:
+        prospects = [dict(row) for row in conn.execute("SELECT id, statut, secteur, source FROM prospects")]
+        interactions = [
+            dict(row)
+            for row in conn.execute(
+                "SELECT id, prospect_id, type, notes, statut_avant, statut_apres, occurred_at FROM interactions"
+            )
+        ]
+    return prospects, interactions
 
 
 # --- Tournées imprimées ---------------------------------------------------

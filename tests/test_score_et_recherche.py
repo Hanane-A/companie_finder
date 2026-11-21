@@ -5,7 +5,6 @@ from datetime import date
 import httpx
 
 from app import scoring, sirene
-from app.geo import Place
 from tests.conftest import manual_prospect
 
 AUJOURDHUI = date(2026, 11, 17)

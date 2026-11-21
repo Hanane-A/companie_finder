@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block page_title %}Performance · COMPANIE FINDER{% endblock %}
+{% block eyebrow %}{% if s.debut %}Du {{ s.debut.strftime('%d/%m/%Y') }} à aujourd'hui{% else %}Depuis le début{% endif %}{% endblock %}
+{% block heading %}Performance{% endblock %}
+
+{% macro jours_fr(value) %}{% if value is none %}–{% elif value < 1 %}moins d'un jour{% else %}{{ '%g'|format(value) }} jour{{ 's' if value >= 2 }}{% endif %}{% endmacro %}
+
+{% block content %}
+<nav class="mb-6 inline-flex flex-wrap items-center gap-1 rounded-xl border border-line bg-card p-1 text-sm font-semibold" aria-label="Période">
+  {% for value, label in periodes %}
+  <a href="/performance?jours={{ value }}" class="sort-tab {% if s.jours == value %}sort-tab--on{% endif %}" {% if s.jours == value %}aria-current="page"{% endif %}>{{ label }}</a>
+  {% endfor %}
+</nav>
+
+<section class="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6" aria-label="Indicateurs">
+  <div class="stat-tile">
+    <span class="stat-label">Contacts</span>
+    <span class="stat-value">{{ s.kpi.contacts }}</span>
+    <span class="mt-1 block text-xs text-ink-500">auprès de {{ s.kpi.prospects_contactes }} salon{{ 's' if s.kpi.prospects_contactes != 1 }}</span>
+  </div>
+  <div class="stat-tile">
+    <span class="stat-label">Passages en salon</span>
+    <span class="stat-value">{{ s.kpi.passages }}</span>
+  </div>
+  <div class="stat-tile">
+    <span class="stat-label">Nouveaux rendez-vous</span>
+    <span class="stat-value">{{ s.kpi.nouveaux_rdv }}</span>
+  </div>
+  <div class="stat-tile">
+    <span class="stat-label">Nouveaux clients</span>
+    <span class="stat-value">{{ s.kpi.nouveaux_clients }}</span>
+  </div>
+  <div class="stat-tile">
+    <span class="stat-label">Taux de conversion</span>
+    <span class="stat-value">{% if s.kpi.conversion is none %}–{% else %}{{ '%g'|format(s.kpi.conversion) }} %{% endif %}</span>
+    <span class="mt-1 block text-xs text-ink-500">clients sur salons contactés</span>
+  </div>
+  <div class="stat-tile">
+    <span class="stat-label">Délai avant signature</span>
+    {% if s.kpi.delai_moyen is none %}
+    <span class="stat-value text-[1.35rem]">Pas encore</span>
+    <span class="mt-1 block text-xs text-ink-500">aucune signature sur la période</span>
+    {% else %}
+    <span class="stat-value">{{ '%g'|format(s.kpi.delai_moyen) }} j</span>
+    <span class="mt-1 block text-xs text-ink-500">en moyenne, médiane {{ '%g'|format(s.kpi.delai_median) }} j ({{ s.kpi.signatures_mesurees }} signature{{ 's' if s.kpi.signatures_mesurees > 1 }})</span>
+    {% endif %}
+  </div>
+</section>
+
+<div class="grid grid-cols-1 items-start gap-6 xl:grid-cols-2">
+  <section class="min-w-0 rounded-2xl border border-line bg-card p-5" aria-labelledby="titre-entonnoir">
+    <h2 id="titre-entonnoir" class="today-title">Taux de conversion par étape</h2>
+    <p class="mt-1 text-sm text-ink-500">Salons dont le premier contact date de la période, et jusqu'où ils sont allés.</p>
+    {% set base = s.entonnoir[0].total %}
+    {% if base %}
+    <ol class="mt-5 flex flex-col gap-3">
+      {% for etape in s.entonnoir %}
+      <li class="grid grid-cols-[7rem_1fr_auto] sm:grid-cols-[8.5rem_1fr_auto] items-center gap-3 text-sm">
+        <span class="font-semibold text-ink-900">{{ etape.label }}</span>
+        <span class="chart-track" tabindex="0" data-tip-title="{{ etape.label }}" data-tip="{{ etape.total }} salon{{ 's' if etape.total != 1 }}{% if etape.taux is not none %}|{{ '%g'|format(etape.taux) }} % de l'étape précédente{% endif %}">
+          <span class="chart-bar" style="width: {{ (100 * etape.total / base) | round(1) }}%"></span>
+        </span>
+        <span class="text-right tabular-nums sm:w-28">
+          <strong class="text-ink-950">{{ etape.total }}</strong>
+          {% if etape.taux is not none %}<span class="text-ink-500">({{ '%g'|format(etape.taux) }} %)</span>{% endif %}
+        </span>
+      </li>
+      {% endfor %}
+    </ol>
+    <p class="mt-4 text-xs text-ink-500">Le pourcentage compare chaque étape à la précédente. Un salon passé par « Intéressé » puis « Refusé » compte bien comme intéressé.</p>
+    {% else %}
+    <p class="mt-5 rounded-xl border border-dashed border-line px-4 py-8 text-center text-sm text-ink-500">Aucun premier contact sur cette période. Notez vos passages et appels pour voir l'entonnoir se remplir.</p>
+    {% endif %}
+  </section>
+
+  <section class="min-w-0 rounded-2xl border border-line bg-card p-5" aria-labelledby="titre-semaines">
+    <h2 id="titre-semaines" class="today-title">Contacts par semaine</h2>
+    <p class="mt-1 text-sm text-ink-500">Passages, appels, messages, rendez-vous et démos, du lundi au dimanche. Survolez une colonne pour le détail.</p>
+    {% if max_semaine %}
+    <div class="week-chart mt-5" role="list">
+      {% for w in s.semaines %}
+      {% set fin = w.debut + timedelta(days=6) %}
+      <div class="week-col" role="listitem" tabindex="0"
+           data-tip-title="Semaine du {{ w.debut.strftime('%d/%m') }} au {{ fin.strftime('%d/%m') }}"
+           data-tip="{{ w.total }} contact{{ 's' if w.total != 1 }}{% for cle, label, _types in groupes %}{% if w[cle] %}|{{ label }} : {{ w[cle] }}{% endif %}{% endfor %}">
+        <span class="week-value {% if w.total == max_semaine or loop.last %}is-shown{% endif %}">{{ w.total }}</span>
+        <span class="week-bar" style="height: {{ (100 * w.total / max_semaine) | round(1) if w.total else 0 }}%"></span>
+        {% set pas = 3 if s.semaines|length > 8 else 1 %}
+        <span class="week-label {% if loop.revindex0 % pas %}is-minor{% endif %}">{{ w.debut.strftime('%d/%m') }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    <details class="mt-4 text-sm">
+      <summary class="cursor-pointer font-semibold text-pine-700">Voir le tableau</summary>
+      <div class="mt-2 overflow-x-auto">
+        <table class="w-full text-left tabular-nums">
+          <thead class="text-ink-500"><tr><th class="py-1.5 pr-3 font-semibold">Semaine du</th>{% for _c, label, _t in groupes %}<th class="py-1.5 pr-3 font-semibold">{{ label }}</th>{% endfor %}<th class="py-1.5 font-semibold">Total</th></tr></thead>
+          <tbody class="divide-y divide-line">
+            {% for w in s.semaines|reverse %}<tr><td class="py-1.5 pr-3">{{ w.debut.strftime('%d/%m/%Y') }}</td>{% for cle, _l, _t in groupes %}<td class="py-1.5 pr-3">{{ w[cle] }}</td>{% endfor %}<td class="py-1.5 font-semibold">{{ w.total }}</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+    {% else %}
+    <p class="mt-5 rounded-xl border border-dashed border-line px-4 py-8 text-center text-sm text-ink-500">Aucun contact sur ces semaines.</p>
+    {% endif %}
+  </section>
+
+  <section class="min-w-0 rounded-2xl border border-line bg-card p-5" aria-labelledby="titre-passages">
+    <h2 id="titre-passages" class="today-title">Résultat des passages</h2>
+    <p class="mt-1 text-sm text-ink-500">Ce qui s'est passé en salon sur la période, d'après les boutons de tournée et la saisie du soir.</p>
+    {% if max_passage %}
+    <ol class="mt-5 flex flex-col gap-3">
+      {% for label, nombre in s.resultats_passage %}
+      <li class="grid grid-cols-[7rem_1fr_auto] sm:grid-cols-[8.5rem_1fr_auto] items-center gap-3 text-sm">
+        <span class="font-semibold text-ink-900">{{ label }}</span>
+        <span class="chart-track" tabindex="0" data-tip-title="{{ label }}" data-tip="{{ nombre }} passage{{ 's' if nombre != 1 }}|{{ '%g'|format((100 * nombre / s.kpi.passages)|round(1)) }} % des passages">
+          <span class="chart-bar" style="width: {{ (100 * nombre / max_passage) | round(1) }}%"></span>
+        </span>
+        <span class="text-right tabular-nums sm:w-20"><strong class="text-ink-950">{{ nombre }}</strong> <span class="text-ink-500">({{ (100 * nombre / s.kpi.passages)|round|int }} %)</span></span>
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}
+    <p class="mt-5 rounded-xl border border-dashed border-line px-4 py-8 text-center text-sm text-ink-500">Aucun passage sur cette période.</p>
+    {% endif %}
+  </section>
+
+  <section class="min-w-0 rounded-2xl border border-line bg-card p-5" aria-labelledby="titre-delais">
+    <h2 id="titre-delais" class="today-title">Délai depuis le premier contact</h2>
+    <p class="mt-1 text-sm text-ink-500">Temps mis pour atteindre chaque étape, pour les salons qui l'ont atteinte sur la période.</p>
+    <div class="mt-4 overflow-x-auto">
+    <table class="w-full text-left text-sm tabular-nums">
+      <thead class="text-ink-500"><tr><th class="py-1.5 pr-3 font-semibold">Étape</th><th class="py-1.5 pr-3 font-semibold">Moyenne</th><th class="py-1.5 pr-3 font-semibold">Médiane</th><th class="py-1.5 font-semibold">Salons</th></tr></thead>
+      <tbody class="divide-y divide-line">
+        {% for d in s.delais_etapes %}
+        <tr><td class="py-2 pr-3 font-semibold text-ink-900">{{ d.label }}</td><td class="py-2 pr-3">{{ jours_fr(d.moyenne) }}</td><td class="py-2 pr-3">{{ jours_fr(d.mediane) }}</td><td class="py-2">{{ d.nombre }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <p class="mt-3 text-xs text-ink-500">La médiane est moins sensible à un salon qui a mis très longtemps : c'est le délai « habituel ».</p>
+  </section>
+
+  <section class="min-w-0 rounded-2xl border border-line bg-card p-5 xl:col-span-2" aria-labelledby="titre-secteurs">
+    <h2 id="titre-secteurs" class="today-title">Par secteur</h2>
+    {% if s.par_secteur %}
+    <div class="mt-4 overflow-x-auto">
+      <table class="w-full text-left text-sm tabular-nums">
+        <thead class="text-ink-500"><tr><th class="py-1.5 pr-3 font-semibold">Secteur</th><th class="py-1.5 pr-3 font-semibold">Contactés</th><th class="py-1.5 pr-3 font-semibold">Intéressés</th><th class="py-1.5 pr-3 font-semibold">Clients</th><th class="py-1.5 font-semibold">Conversion</th></tr></thead>
+        <tbody class="divide-y divide-line">
+          {% for row in s.par_secteur %}
+          <tr><td class="py-2 pr-3 font-semibold text-ink-900">{{ row.secteur }}</td><td class="py-2 pr-3">{{ row.contactes }}</td><td class="py-2 pr-3">{{ row.interesses }}</td><td class="py-2 pr-3">{{ row.clients }}</td><td class="py-2">{% if row.taux is none %}–{% else %}{{ '%g'|format(row.taux) }} %{% endif %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="mt-4 text-sm text-ink-500">Aucun salon contacté sur la période.</p>
+    {% endif %}
+  </section>
+</div>
+
+<details class="mt-6 rounded-2xl border border-line bg-card p-5 text-sm text-ink-700">
+  <summary class="cursor-pointer font-semibold text-ink-950">Comment ces chiffres sont calculés</summary>
+  <ul class="mt-3 list-disc space-y-1.5 pl-5">
+    <li>Un contact est une ligne du journal de type passage, appel, SMS / WhatsApp, message Instagram, email, rendez-vous ou démonstration, dont la date est passée. Les notes et les changements de statut ne comptent pas.</li>
+    <li>Le taux de conversion par étape porte sur les salons dont le premier contact tombe dans la période. Chaque pourcentage compare une étape à la précédente.</li>
+    <li>Le taux de conversion global = clients ÷ salons contactés de cette même cohorte, calculé sur les totaux.</li>
+    <li>Nouveaux rendez-vous et nouveaux clients comptent les salons qui ont atteint cette étape pendant la période, quel que soit leur premier contact.</li>
+    <li>Le délai avant signature va du premier contact au passage en « Client ». Les salons passés en Client sans historique dans le journal sont comptés comme clients mais pas dans les délais.</li>
+    <li>Les statistiques portent sur {{ total_prospects }} fiche{{ 's' if total_prospects != 1 }} et sur tout leur journal.</li>
+  </ul>
+</details>
+
+<div id="chart-tip" class="chart-tip" role="status" hidden></div>
+<script>
+(function () {
+  const tip = document.getElementById('chart-tip');
+  function show(target) {
+    const lines = (target.dataset.tip || '').split('|');
+    tip.replaceChildren();
+    const value = document.createElement('strong');
+    value.textContent = lines.shift();
+    const title = document.createElement('span');
+    title.className = 'chart-tip-title';
+    title.textContent = target.dataset.tipTitle || '';
+    tip.append(title, value);
+    lines.forEach((line) => { const row = document.createElement('span'); row.textContent = line; tip.append(row); });
+    tip.hidden = false;
+    const box = target.getBoundingClientRect();
+    const width = tip.offsetWidth;
+    const left = Math.min(window.innerWidth - width - 8, Math.max(8, box.left + box.width / 2 - width / 2));
+    tip.style.left = `${left}px`;
+    tip.style.top = `${Math.max(8, box.top - tip.offsetHeight - 8)}px`;
+  }
+  const hide = () => { tip.hidden = true; };
+  document.querySelectorAll('[data-tip]').forEach((el) => {
+    el.addEventListener('pointerenter', () => show(el));
+    el.addEventListener('pointerleave', hide);
+    el.addEventListener('focus', () => show(el));
+    el.addEventListener('blur', hide);
+  });
+  window.addEventListener('scroll', hide, { passive: true });
+})();
+</script>
+{% endblock %}

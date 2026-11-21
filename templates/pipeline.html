@@ -18,7 +18,7 @@
   </form>
   {{ vue_switch('pipeline', filters) }}
 </div>
-<p class="mb-3 text-sm text-ink-500">Glissez une carte dans une autre colonne pour changer son statut. Le changement est noté dans le journal.</p>
+<p class="mb-3 text-sm text-ink-500">Glissez une carte dans une autre colonne (ou utilisez son menu) pour changer son statut. Le changement est noté dans le journal.</p>
 
 <div class="kanban" id="kanban">
   {% for col in colonnes %}
@@ -29,7 +29,7 @@
     </header>
     <ol class="flex flex-1 flex-col gap-2" data-dropzone>
       {% for p in col.cartes %}
-      <li class="kanban-card" draggable="true" data-id="{{ p.id }}">
+      <li class="kanban-card" data-id="{{ p.id }}">
         <a href="/prospects/{{ p.id }}" class="block font-semibold leading-snug text-ink-950 hover:text-pine-700">{{ p.nom_affiche }}</a>
         <p class="mt-0.5 truncate text-xs text-ink-500">{{ p.ville or p.adresse }}</p>
         <div class="mt-2 flex flex-wrap items-center gap-1.5">{{ score_badge(p) }}{{ relance_badge(p) }}</div>
@@ -52,7 +52,6 @@
 <script>
 (function () {
   const board = document.getElementById('kanban');
-  let dragged = null;
 
   async function move(card, statut) {
     const from = card.closest('.kanban-col');
@@ -90,32 +89,56 @@
     counter.dataset.hidden = Number(counter.textContent) - col.querySelectorAll('.kanban-card').length;
   });
 
-  board.addEventListener('dragstart', (event) => {
-    dragged = event.target.closest('.kanban-card');
-    if (!dragged) return;
-    dragged.classList.add('is-dragging');
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', dragged.dataset.id);
+  // Glisser à la souris (événements pointeur) : fiable sur tous les navigateurs.
+  // Au doigt, la page défile normalement et le menu de la carte sert à changer le statut.
+  let drag = null;
+  const SEUIL = 6;
+
+  board.addEventListener('pointerdown', (event) => {
+    if (event.pointerType !== 'mouse' || event.button !== 0) return;
+    const card = event.target.closest('.kanban-card');
+    if (!card || event.target.closest('a, select, label, button')) return;
+    drag = { card, x: event.clientX, y: event.clientY, ghost: null };
   });
-  board.addEventListener('dragend', () => {
-    dragged?.classList.remove('is-dragging');
-    board.querySelectorAll('.is-over').forEach((el) => el.classList.remove('is-over'));
-    dragged = null;
-  });
-  board.addEventListener('dragover', (event) => {
-    const col = event.target.closest('.kanban-col');
-    if (!col || !dragged) return;
+
+  document.addEventListener('pointermove', (event) => {
+    if (!drag) return;
+    if (!drag.ghost) {
+      if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < SEUIL) return;
+      const box = drag.card.getBoundingClientRect();
+      drag.dx = drag.x - box.left;
+      drag.dy = drag.y - box.top;
+      drag.ghost = drag.card.cloneNode(true);
+      drag.ghost.classList.add('kanban-ghost');
+      drag.ghost.style.width = `${box.width}px`;
+      document.body.appendChild(drag.ghost);
+      drag.card.classList.add('is-dragging');
+      document.body.classList.add('is-dragging-card');
+    }
     event.preventDefault();
+    drag.ghost.style.transform = `translate(${event.clientX - drag.dx}px, ${event.clientY - drag.dy}px)`;
+    const col = document.elementFromPoint(event.clientX, event.clientY)?.closest('.kanban-col');
     board.querySelectorAll('.is-over').forEach((el) => el !== col && el.classList.remove('is-over'));
-    col.classList.add('is-over');
+    if (col) col.classList.add('is-over');
   });
-  board.addEventListener('drop', (event) => {
-    const col = event.target.closest('.kanban-col');
-    if (!col || !dragged) return;
-    event.preventDefault();
-    col.classList.remove('is-over');
-    move(dragged, col.dataset.statut);
-  });
+
+  function endDrag(event, cancel) {
+    if (!drag) return;
+    const { card, ghost } = drag;
+    drag = null;
+    document.body.classList.remove('is-dragging-card');
+    board.querySelectorAll('.is-over').forEach((el) => el.classList.remove('is-over'));
+    if (!ghost) return;
+    ghost.remove();
+    card.classList.remove('is-dragging');
+    if (cancel) return;
+    const col = document.elementFromPoint(event.clientX, event.clientY)?.closest('.kanban-col');
+    if (col) move(card, col.dataset.statut);
+  }
+  document.addEventListener('pointerup', (event) => endDrag(event, false));
+  document.addEventListener('pointercancel', (event) => endDrag(event, true));
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape') endDrag(event, true); });
+
   board.addEventListener('change', (event) => {
     const select = event.target.closest('[data-move]');
     if (select) move(select.closest('.kanban-card'), select.value);

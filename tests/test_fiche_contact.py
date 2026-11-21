@@ -21,12 +21,15 @@ def test_email_et_instagram():
 
 
 def test_migration_garde_les_fiches_existantes(legacy_db):
-    before = sqlite3.connect(legacy_db).execute("SELECT COUNT(*) FROM prospects").fetchone()[0]
+    conn = sqlite3.connect(legacy_db)
+    before = conn.execute("SELECT COUNT(*) FROM prospects").fetchone()[0]
+    conn.close()
     db.init_db()
     conn = sqlite3.connect(legacy_db)
     columns = {row[1] for row in conn.execute("PRAGMA table_info(prospects)")}
     assert {"telephone", "email", "prochaine_action_at", "dernier_contact_at"} <= columns
     assert conn.execute("SELECT COUNT(*) FROM prospects").fetchone()[0] == before
+    conn.close()
     db.init_db()  # une deuxième migration ne casse rien
 
 

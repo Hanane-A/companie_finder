@@ -21,6 +21,7 @@ COMPANIE FINDER interroge le fichier public SIRENE, puis garde vos prospects, vo
 - **Aujourd'hui** : relances en retard et du jour, rendez-vous à venir, prospects intéressés sans relance, contacts faits dans la journée.
 - **Fiche prospect** : contact, téléphone, email, Instagram, boutons Appeler / SMS / WhatsApp, journal des passages et appels (en ajout seul), prochaine action.
 - **Score HANUP Desk** : note sur 100 (chaud, tiède, froid) expliquée point par point. Barème dans `app/scoring.py`.
+- **Performance** : contacts par semaine, taux de conversion par étape, résultat des passages, délai avant signature, conversion par secteur (période : 7, 30, 90 jours ou depuis le début). Calculs dans `app/stats.py`.
 - **Tournée optimisée** : ordre de passage calculé (plus proche voisin puis 2-opt), départ depuis votre position ou une adresse, à pied, en transports, à vélo ou en voiture, heures d'arrivée estimées, carte, liens Google Maps, résultat du passage en un clic.
 
 ### Temps de trajet réels (facultatif)

@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app import db, ors, routing, scoring
+from app import db, ors, routing, scoring, stats
 from app.exporting import filename, render_csv
 from app.geo import LocationError, geocode, resolve_place
 from app.labels import (
@@ -73,6 +73,7 @@ def km(metres: float) -> str:
 
 
 templates.env.filters["duree"] = duree
+templates.env.globals["timedelta"] = timedelta
 templates.env.filters["km"] = km
 templates.env.globals.update(
     STATUTS=STATUTS,
@@ -123,7 +124,7 @@ def render(request: Request, name: str, *, status_code: int = 200, **ctx):
         "banner_kind": "ok",
         **ctx,
     }
-    return templates.TemplateResponse(name, context, status_code=status_code)
+    return templates.TemplateResponse(request, name, context, status_code=status_code)
 
 
 def field(form, name: str) -> str:
@@ -513,6 +514,31 @@ def pipeline(request: Request):
         colonnes=colonnes,
         counts=counts,
         has_filters=any(filters.values()),
+    )
+
+
+@app.get("/performance")
+def performance(request: Request):
+    try:
+        jours = int(request.query_params.get("jours") or 30)
+    except ValueError:
+        jours = 30
+    if jours not in {value for value, _label in stats.PERIODES}:
+        jours = 30
+    prospects, interactions = db.donnees_stats()
+    resultat = stats.calculer(prospects, interactions, jours=jours, maintenant=datetime.now())
+    max_semaine = max((s["total"] for s in resultat["semaines"]), default=0)
+    max_passage = max((n for _label, n in resultat["resultats_passage"]), default=0)
+    return render(
+        request,
+        "performance.html",
+        active="performance",
+        s=resultat,
+        periodes=stats.PERIODES,
+        groupes=stats.GROUPES_CONTACT,
+        max_semaine=max_semaine,
+        max_passage=max_passage,
+        total_prospects=len(prospects),
     )
 
 
